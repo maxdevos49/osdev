@@ -57,7 +57,7 @@ static void pmm_memory_map_print(void)
 	for (i = 0; i < memmap_request.response->entry_count; i++)
 	{
 		struct limine_memmap_entry *entry = memmap_request.response->entries[i];
-		printf("Base: %p Length: %'10d bytes Type: %s\n", entry->base, entry->length, MEMORY_MAP_REGION_NAME[entry->type]);
+		printf("Base: %p Length: %'10d bytes Type: %s\n", (void*)entry->base, entry->length, MEMORY_MAP_REGION_NAME[entry->type]);
 	}
 }
 

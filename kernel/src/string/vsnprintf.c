@@ -187,7 +187,7 @@ size_t vsnprintf(char *restrict buffer, size_t buffer_size, const char *restrict
 				break;
 			default:
 				strcpy(buffer + written, "[INVALID SPECIFIER]");
-				written += strlen(str);
+				written += strlen(buffer);
 				break;
 			}
 		}

@@ -1,14 +1,16 @@
-# Limine C Template
+# m4xdevOS
 
-This repository will demonstrate how to set up a basic kernel in C using Limine.
+x86_64 kernel with a goal of getting to userspace and porting Doom. Further plans include making small games for the OS and treating it like a custom game console OS.
 
-export KARCH=x86_64
-export KCC=x86_64-elf-gcc
-export KLD=x86_64-elf-ld
-
-
-`x86_64-elf-objcopy -O elf64-x86-64 -I binary terminus-normal.psf terminus-normal.o`
-`x86_64-elf-objcopy -O elf64-x86-64 -I binary terminus-bold.psf terminus-bold.o`
+### Development Resources:
+- [AMD Manual](https://www.amd.com/content/dam/amd/en/documents/processor-tech-docs/programmer-references/24593.pdf)
+- Intel Manual
+- [OS Dev Wiki](https://wiki.osdev.org/Expanded_Main_Page)
+- [Limine Protocol](https://github.com/limine-bootloader/limine/blob/trunk/PROTOCOL.md)
+- https://cs61.seas.harvard.edu/wiki/2017/Kernel2/
+- https://cs.bham.ac.uk/~exr/lectures/opsys/10_11/lectures/os-dev.pdf
+- [Ascii Table](https://www.ascii-code.com/)
+- [My first kernel](https://github.com/maxdevos49/MadOS)
 
 ## How to use this?
 
@@ -22,9 +24,17 @@ Additionally, building an ISO with `make all` requires `xorriso`, and building a
 
 ### Architectural targets
 
+```
+export KARCH=x86_64
+
+export KCC=x86_64-elf-gcc
+
+export KLD=x86_64-elf-ld
+```
+
 The `KARCH` make variable determines the target architecture to build the kernel and image for.
 
-The default `KARCH` is `x86_64`. Other options include: `aarch64`, `loongarch64`, and `riscv64`.
+The default `KARCH` is `x86_64`. Other options include: `aarch64`(Not yet supported if ever).
 
 ### Makefile targets
 

@@ -3,7 +3,7 @@ override MAKEFLAGS += -rR
 
 # This is the name that our final executable will have.
 # Change as needed.
-override OUTPUT := kernel
+override OUTPUT := m4xdevOS
 
 # Convenience macro to reliably declare user overridable variables.
 define DEFAULT_VAR =
@@ -107,33 +107,6 @@ else ifeq ($(KARCH),aarch64)
         -mgeneral-regs-only
     override KLDFLAGS += \
         -m aarch64elf
-else ifeq ($(KARCH),riscv64)
-    ifeq ($(KCC_IS_CLANG),yes)
-        override KCC += \
-            -target riscv64-elf
-        override KCFLAGS += \
-            -march=rv64imac
-    else
-        override KCFLAGS += \
-            -march=rv64imac_zicsr_zifencei
-    endif
-    override KCFLAGS += \
-        -mabi=lp64 \
-        -mno-relax
-    override KLDFLAGS += \
-        -m elf64lriscv \
-        --no-relax
-else ifeq ($(KARCH),loongarch64)
-    ifeq ($(KCC_IS_CLANG),yes)
-        override KCC += \
-            -target loongarch64-none
-    endif
-    override KCFLAGS += \
-        -march=loongarch64 \
-        -mabi=lp64s
-    override KLDFLAGS += \
-        -m elf64loongarch \
-        --no-relax
 else
     $(error Architecture $(KARCH) not supported)
 endif
