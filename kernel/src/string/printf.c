@@ -4,6 +4,7 @@
 #include "utility.h"
 #include "../graphics/graphics.h"
 #include "../devices/tty.h"
+#include "../serial.h"
 
 int printf(const char *restrict format, ...)
 {
@@ -16,7 +17,15 @@ int printf(const char *restrict format, ...)
 
 	va_end(args);
 
-	TTY_puts(buffer);
+	for (int i = 0; i < written; i++)
+	{
+		serial_write(buffer[i]);
+	}
+
+	if (TTY_ready())
+	{
+		TTY_puts(buffer);
+	}
 
 	return written;
 }

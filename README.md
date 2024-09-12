@@ -11,6 +11,7 @@ x86_64 kernel with a goal of getting to userspace and porting Doom. Further plan
 - https://cs.bham.ac.uk/~exr/lectures/opsys/10_11/lectures/os-dev.pdf
 - [Ascii Table](https://www.ascii-code.com/)
 - [My first kernel](https://github.com/maxdevos49/MadOS)
+- https://os.phil-opp.com/paging-implementation/#recursive-page-tables
 
 ## How to use this?
 
@@ -21,20 +22,6 @@ Any `make` command depends on GNU make (`gmake`) and is expected to be run using
 It is recommended to build this project using a standard UNIX-like system, using a Clang/LLVM toolchain capable of cross compilation (the default, unless `KCC` and/or `KLD` are explicitly set).
 
 Additionally, building an ISO with `make all` requires `xorriso`, and building a HDD/USB image with `make all-hdd` requires `sgdisk` (usually from `gdisk` or `gptfdisk` packages) and `mtools`.
-
-### Architectural targets
-
-```
-export KARCH=x86_64
-
-export KCC=x86_64-elf-gcc
-
-export KLD=x86_64-elf-ld
-```
-
-The `KARCH` make variable determines the target architecture to build the kernel and image for.
-
-The default `KARCH` is `x86_64`. Other options include: `aarch64`(Not yet supported if ever).
 
 ### Makefile targets
 

@@ -150,7 +150,7 @@ size_t vsnprintf(char *restrict buffer, size_t buffer_size, const char *restrict
 				buffer[written++] = (char)va_arg(args, int);
 				break;
 			case 's':
-				const char *str = (const char *)va_arg(args, const char *);
+				char *str = (char *)va_arg(args, char *);
 
 				strcpy(buffer + written, str);
 

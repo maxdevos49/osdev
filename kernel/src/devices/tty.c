@@ -1,7 +1,9 @@
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "../graphics/graphics.h"
 #include "../string/utility.h"
+#include "../color.h"
 
 struct TTY_STATE
 {
@@ -13,7 +15,7 @@ struct TTY_STATE
 
 static struct TTY_STATE _tty;
 
-void TTY_init()
+void TTY_init(void)
 {
 	// Start cursor at top left
 	_tty.cursor_x = 0;
@@ -28,6 +30,11 @@ void TTY_init()
 	// snprintf(tbuffer, 512, "Cursor x: %d Cursor y: %d Cols: %d Rows: %d", _tty.cursor_x, _tty.cursor_y, _tty.col_size, _tty.row_size);
 
 	// draw_text(GRAPHICS_get_global_context(), 100, 100, tbuffer);
+}
+
+bool TTY_ready(void)
+{
+	return _tty.row_size != 0;
 }
 
 void TTY_putc(char c)
@@ -92,6 +99,54 @@ void TTY_puts(const char *str)
 {
 	for (int i = 0; str[i] != '\0'; i++)
 	{
+		if (str[i] == '\e')
+		{
+			if (memcmp(str + i, BLK, 7) == 0)
+			{
+				set_stroke(GRAPHICS_get_global_context(), 0x000000);
+				i += 6;
+			}
+			else if (memcmp(str + i, RED, 7) == 0)
+			{
+				set_stroke(GRAPHICS_get_global_context(), 0xff0000);
+				i += 6;
+			}
+			else if (memcmp(str + i, GRN, 7) == 0)
+			{
+				set_stroke(GRAPHICS_get_global_context(), 0x00ff00);
+				i += 6;
+			}
+			else if (memcmp(str + i, YEL, 7) == 0)
+			{
+				set_stroke(GRAPHICS_get_global_context(), 0xffff00);
+				i += 6;
+			}
+			else if (memcmp(str + i, BLU, 7) == 0)
+			{
+				set_stroke(GRAPHICS_get_global_context(), 0x0000ff);
+				i += 6;
+			}
+			else if (memcmp(str + i, MAG, 7) == 0)
+			{
+				set_stroke(GRAPHICS_get_global_context(), 0xff00ff);
+				i += 6;
+			}
+			else if (memcmp(str + i, CYN, 7) == 0)
+			{
+				set_stroke(GRAPHICS_get_global_context(), 0x00ffff);
+				i += 6;
+			}
+			else if (memcmp(str + i, WHT, 7) == 0)
+			{
+				set_stroke(GRAPHICS_get_global_context(), 0xffffff);
+				i += 6;
+			}
+
+			continue;
+		}
+
 		TTY_putc(str[i]);
 	}
+
+	set_stroke(GRAPHICS_get_global_context(), 0xffffff);
 }

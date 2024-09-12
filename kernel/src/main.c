@@ -1,30 +1,26 @@
-#include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
 #include <limine.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
-#include "fonts/font.h"
-#include "string/utility.h"
-#include "memory/utility.h"
-#include "graphics/graphics.h"
+#include "color.h"
+#include "cpuid.h"
 #include "devices/tty.h"
 #include "error.h"
+#include "fonts/font.h"
+#include "graphics/graphics.h"
+#include "macro.h"
+#include "memory/memory.h"
+#include "serial.h"
+#include "string/utility.h"
 
 // TODO list
 // Setup own stack
 // Setup own GDT
-// Setup own Paging
 // Setup own IDT
 // Then claim all bootloader reclaimable memory
 
-__attribute__((used, section(".requests"))) static volatile LIMINE_BASE_REVISION(2);
-
-// __attribute__((used, section(".requests"))) static volatile struct limine_stack_size_request stack_size_request = {
-// 	.id = LIMINE_STACK_SIZE_REQUEST,
-// 	.revision = 0};
-
-// __attribute__((used, section(".requests_start_marker"))) static volatile LIMINE_REQUESTS_START_MARKER;
-// __attribute__((used, section(".requests_end_marker"))) static volatile LIMINE_REQUESTS_END_MARKER;
+ATTR_REQUEST static volatile LIMINE_BASE_REVISION(2);
 
 static void hcf()
 {
@@ -37,20 +33,20 @@ static void hcf()
 void abort(const char *error)
 {
 	set_stroke(GRAPHICS_get_global_context(), 0xff0000);
-	printf("ABORT: %s\n", error);
+	printf("[ABORT] %s\n", error);
 
 	hcf();
 }
 
 void kmain(void)
 {
+	init_serial();
+
 	// Ensure the bootloader actually understands our base revision (see spec).
 	if (LIMINE_BASE_REVISION_SUPPORTED == false)
 	{
 		hcf();
 	}
-
-	// TODO setup serial printing
 
 	struct FONT font;
 	PSF2_load_font(&font);
@@ -72,32 +68,10 @@ void kmain(void)
 
 	TTY_init();
 
+	printf(KINFO "========== m4xdevOS ========== \n");
+
 	init_memory();
 
-	// memory_map_print();
-
-	// struct MEMORY_MAP_STATS memory_stats = memory_map_stats();
-	// size_t frame_allocator_size = frame_allocator_required_size(memory_stats.total_memory);
-	// void *frame_allocator_address = memory_map_first_usable_frame(frame_allocator_size);
-	// if (frame_allocator_address == NULL)
-	// {
-	// 	abort("Failed to calculate a valid address for the Frame Allocator.");
-	// }
-
-	// initialize_frame_allocator(frame_allocator_address, frame_allocator_size);
-
-	// void *frame_address = allocate_frames(1);
-	// printf("Frame address: %p\n", frame_address);
-	// free_frames((uint64_t)frame_address, 1);
-	// printf("Frame address: %p\n", allocate_frames(1));
-	// printf("Frame address: %p\n", allocate_frames(1));
-
-	// PAGING_init();
-
-	// uint64_t heap_data[1028];
-
-	// initialize_heap(&heap_data, 1028 * sizeof(uint64_t));
-
-	printf("Done. Halting\n");
+	printf(KINFO "Done. Halting\n");
 	hcf();
 }
