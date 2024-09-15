@@ -44,13 +44,16 @@ override KNASMFLAGS += \
     -Wall \
     -F dwarf\
     -g \
-    -f elf64
+    -f elf64\
+	-w-reloc-rel-dword \
+	-w-reloc-abs-dword
 
 # Internal linker flags that should not be changed by the user.
 override KLDFLAGS += \
     -m elf_x86_64\
     -nostdlib \
     -static \
+	-g \
     -z max-page-size=0x1000 \
     -gc-sections \
     -T linker-x86_64.ld

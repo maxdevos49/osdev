@@ -4,3 +4,4 @@
 *.iso
 *.hdd
 serial.log
+.DS_Store

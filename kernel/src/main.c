@@ -12,12 +12,12 @@
 #include "macro.h"
 #include "memory/memory.h"
 #include "serial.h"
+#include "gdt.h"
+#include "interrupts/idt.h"
 #include "string/utility.h"
 
 // TODO list
 // Setup own stack
-// Setup own GDT
-// Setup own IDT
 // Then claim all bootloader reclaimable memory
 
 ATTR_REQUEST static volatile LIMINE_BASE_REVISION(2);
@@ -71,6 +71,8 @@ void kmain(void)
 	printf(KINFO "========== m4xdevOS ========== \n");
 
 	init_memory();
+	init_gdt();
+	init_idt();
 
 	printf(KINFO "Done. Halting\n");
 	hcf();
