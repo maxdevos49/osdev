@@ -132,9 +132,9 @@ void init_idt(void)
 
 	printf(KINFO "Loading IDT Register...\n");
 	printf("\tIDT base: %p\n", &_idt);
-	printf("\tIDT limit: %'d bytes\n", sizeof(_idt));
+	printf("\tIDT limit: %'lu bytes\n", sizeof(_idt));
 	load_idt();
-	printf(KOK "IDT Register loaded\n", sizeof(_idt));
+	printf(KOK "IDT Register loaded\n");
 }
 
 void load_idt(void)
@@ -193,11 +193,11 @@ const char *exception_messages[] = {
 
 void isr_exception_handler(struct INTERRUPT_STACK *stack)
 {
-	printf(KPANIC "%s Exception (%#x)", exception_messages[stack->vector], stack->vector);
+	printf(KPANIC "%s Exception (%#lx)", exception_messages[stack->vector], stack->vector);
 
 	if (stack->error_code != 0)
 	{
-		printf(" | Error Code: %#016x\n", stack->error_code);
+		printf(" | Error Code: %#018lx\n", stack->error_code);
 	}
 	else
 	{
@@ -206,14 +206,14 @@ void isr_exception_handler(struct INTERRUPT_STACK *stack)
 
 	strace(10);
 
-	printf("RAX=%p  RBX=%p  RCX=%p  RDX=%p\n", stack->rax, stack->rbx, stack->rcx, stack->rdx);
-	printf("RSI=%p  RDI=%p  RBP=%p  RSP=%p\n", stack->rsi, stack->rdi, stack->rbp, stack->return_rsp);
-	printf("R8 =%p  R9 =%p  R10=%p  R11=%p\n", stack->r8, stack->r9, stack->r10, stack->r11);
-	printf("R12=%p  R13=%p  R14=%p  R15=%p\n", stack->r12, stack->r13, stack->r14, stack->r15);
-	printf("RIP=%p  RFL=%p\n", stack->return_rip, stack->return_rflags);
-	printf("CR0=%p  CR2=%p  CR3=%p  CR4=%p\n", stack->cr0, stack->cr2, stack->cr3, stack->cr4);
-	printf("DR0=%p  DR1=%p  DR2=%p  DR3=%p\n", stack->dr0, stack->dr1, stack->dr2, stack->dr3);
-	printf("DR6=%p  DR7=%p\n", stack->dr6, stack->dr7);
+	printf("RAX=%016lx  RBX=%016lx  RCX=%016lx  RDX=%016lx\n", stack->rax, stack->rbx, stack->rcx, stack->rdx);
+	printf("RSI=%016lx  RDI=%016lx  RBP=%016lx  RSP=%016lx\n", stack->rsi, stack->rdi, stack->rbp, stack->return_rsp);
+	printf("R8 =%016lx  R9 =%016lx  R10=%016lx  R11=%016lx\n", stack->r8, stack->r9, stack->r10, stack->r11);
+	printf("R12=%016lx  R13=%016lx  R14=%016lx  R15=%016lx\n", stack->r12, stack->r13, stack->r14, stack->r15);
+	printf("RIP=%016lx  RFL=%016lx\n", stack->return_rip, stack->return_rflags);
+	printf("CR0=%016lx  CR2=%016lx  CR3=%016lx  CR4=%016lx\n", stack->cr0, stack->cr2, stack->cr3, stack->cr4);
+	printf("DR0=%016lx  DR1=%016lx  DR2=%016lx  DR3=%016lx\n", stack->dr0, stack->dr1, stack->dr2, stack->dr3);
+	printf("DR6=%016lx  DR7=%016lx\n", stack->dr6, stack->dr7);
 
 	abort("System will now halt\n");
 }

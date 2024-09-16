@@ -76,20 +76,20 @@ void init_gdt(void)
 	printf(KINFO "Setting up GDT entries...\n");
 	_gdt[0].raw = 0; // Null Descriptor
 
-	printf("\tNull Descriptor: %p\n", _gdt[0].raw);
+	printf("\tNull Descriptor: %#018lx\n", _gdt[0].raw);
 
 	write_code_descriptor(1, PRIVILEGE_LVL_0, true); // Kernel code descriptor
 	write_data_descriptor(2, PRIVILEGE_LVL_0);		 // Kernel data descriptor
 	write_code_descriptor(3, PRIVILEGE_LVL_3, true); // Userspace code descriptor
 	write_data_descriptor(4, PRIVILEGE_LVL_3);		 // Userspace data descriptor
 
-	printf("\tKernel code segment: %p\n", _gdt[1].raw);
-	printf("\tKernel data segment: %p\n", _gdt[2].raw);
-	printf("\tUser code segment: %p\n", _gdt[3].raw);
-	printf("\tUser data segment: %p\n", _gdt[4].raw);
+	printf("\tKernel code segment: %#018lx\n", _gdt[1].raw);
+	printf("\tKernel data segment: %#018lx\n", _gdt[2].raw);
+	printf("\tUser code segment: %#018lx\n", _gdt[3].raw);
+	printf("\tUser data segment: %#018lx\n", _gdt[4].raw);
 
 	printf(KINFO "Loading GDT...\n");
-	printf("\tNew GDTR limit: %'d bytes\n", sizeof(_gdt));
+	printf("\tNew GDTR limit: %'lu bytes\n", sizeof(_gdt));
 	printf("\tNew GDTR base: %p\n", &_gdt);
 
 	load_gdt(sizeof(_gdt), (uintptr_t)&_gdt);

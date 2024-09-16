@@ -13,16 +13,27 @@
 #define POUND_FLAG ((uint8_t)1 << 4)
 #define APOSTROPHE_FLAG ((uint8_t)1 << 5)
 
+enum SIZE_MODIFIER
+{
+	BYTE_SIZE,
+	SHORT_SIZE,
+	NORMAL_SIZE,
+	LONG_SIZE,
+	LONG_LONG_SIZE,
+};
+
 struct FORMAT_SPECIFIER
 {
 	char specifier;
 	uint8_t flags;
+	enum SIZE_MODIFIER size;
 	uint16_t width;
 	uint16_t precision;
 };
 
 static bool is_numeric(char c);
 static bool is_flag(char c);
+static bool is_size_modifier(char c);
 static int parse_byte(char c);
 static char get_pad_char(uint8_t flags);
 
@@ -89,6 +100,7 @@ size_t vsnprintf(char *restrict buffer, size_t buffer_size, const char *restrict
 			f.flags = 0;
 			f.precision = 1;
 			f.width = 0;
+			f.size = NORMAL_SIZE;
 			f.specifier = '\0';
 
 			// Check for flags
@@ -142,6 +154,33 @@ size_t vsnprintf(char *restrict buffer, size_t buffer_size, const char *restrict
 				}
 			}
 
+			// Check for size modifier
+			if (*format == 'l' || *format == 'h')
+			{
+				while (is_size_modifier(*format))
+				{
+
+					if (f.size == NORMAL_SIZE && *format == 'l')
+					{
+						f.size = LONG_SIZE;
+					}
+					else if (f.size == LONG_SIZE && *format == 'l')
+					{
+						f.size = LONG_LONG_SIZE;
+					}
+					else if (f.size == NORMAL_SIZE && *format == 'h')
+					{
+						f.size = SHORT_SIZE;
+					}
+					else if (f.size == SHORT_SIZE && *format == 'h')
+					{
+						f.size = BYTE_SIZE;
+					}
+
+					format++;
+				}
+			}
+
 			f.specifier = *(format++);
 
 			switch (f.specifier)
@@ -170,14 +209,48 @@ size_t vsnprintf(char *restrict buffer, size_t buffer_size, const char *restrict
 				break;
 			case 'd':
 			case 'i':
-				written += snprintf_int(buffer + written, buffer_size - written, (int64_t)va_arg(args, int32_t), &f);
+				if (f.size == NORMAL_SIZE)
+				{
+					written += snprintf_int(buffer + written, buffer_size - written, (int64_t)va_arg(args, int), &f);
+				}
+				else if (f.size == LONG_SIZE)
+				{
+					written += snprintf_int(buffer + written, buffer_size - written, (int64_t)va_arg(args, long int), &f);
+				}
+				else if (f.size == LONG_LONG_SIZE)
+				{
+					written += snprintf_int(buffer + written, buffer_size - written, va_arg(args, long long int), &f);
+				}
 				break;
 			case 'u':
-				written += snprintf_int(buffer + written, buffer_size - written, (uint64_t)va_arg(args, uint32_t), &f);
+				if (f.size == NORMAL_SIZE)
+				{
+					written += snprintf_int(buffer + written, buffer_size - written, (uint64_t)va_arg(args, unsigned int), &f);
+				}
+				else if (f.size == LONG_SIZE)
+				{
+					written += snprintf_int(buffer + written, buffer_size - written, (uint64_t)va_arg(args, unsigned long int), &f);
+				}
+				else if (f.size == LONG_LONG_SIZE)
+				{
+					written += snprintf_int(buffer + written, buffer_size - written, va_arg(args, unsigned long long int), &f);
+				}
 				break;
 			case 'x':
 			case 'X':
-				written += snprintf_hex(buffer + written, buffer_size - written, (uint64_t)va_arg(args, uint32_t), &f);
+				if (f.size == NORMAL_SIZE)
+				{
+					written += snprintf_hex(buffer + written, buffer_size - written, (uint64_t)va_arg(args, unsigned int), &f);
+				}
+				else if (f.size == LONG_SIZE)
+				{
+					written += snprintf_hex(buffer + written, buffer_size - written, (uint64_t)va_arg(args, unsigned long int), &f);
+				}
+				else if (f.size == LONG_LONG_SIZE)
+				{
+					written += snprintf_hex(buffer + written, buffer_size - written, va_arg(args, unsigned long long int), &f);
+				}
+
 				break;
 			case 'p':
 				f.specifier = 'x';
@@ -214,6 +287,11 @@ static bool is_flag(char c)
 	}
 
 	return false;
+}
+
+static bool is_size_modifier(char c)
+{
+	return c == 'l' || c == 'h';
 }
 
 static bool is_numeric(char c)
@@ -254,7 +332,7 @@ static size_t snprintf_int(char *buffer, size_t buffer_size, int64_t num, struct
 	}
 
 	// Convert num to int string
-	for (int i = num; i != 0; i /= 10)
+	for (int64_t i = num; i != 0; i /= 10)
 	{
 		char digit = (i % 10) + 48;
 

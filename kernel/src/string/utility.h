@@ -16,9 +16,9 @@ void strrev(char *str);
 int strcmp(const char *s1, const char *s2);
 size_t leftpad(char *str_buffer, size_t buffer_size, size_t desired_str_length, char character);
 size_t rightpad(char *str_buffer, size_t buffer_size, size_t desired_str_length, char character);
-size_t snprintf(char *restrict buffer, size_t buffer_size, const char *restrict format, ...);
+__attribute__ ((format (printf, 3, 4))) size_t snprintf(char *restrict buffer, size_t buffer_size, const char *restrict format, ...);
 size_t vsnprintf(char *restrict buffer, size_t buffer_size, const char *restrict format, va_list args);
 
-int printf(const char *restrict format, ...);
+__attribute__ ((format (printf, 1, 2))) int printf(const char *restrict format, ...);
 
 #endif

@@ -112,7 +112,7 @@ bool release_memory(const phys_addr_t physical_address, const size_t size_in_byt
 	{
 		if (is_page_used(&_pm_context, i) == false)
 		{
-			printf(KERROR "Cannot mark a page 'available' which is already marked 'available'. Page Index: %d\n", i);
+			printf(KERROR "Cannot mark a page 'available' which is already marked 'available'. Page Index: %ld\n", i);
 			return false;
 		}
 
@@ -137,7 +137,7 @@ bool reserve_memory(const phys_addr_t physical_address, const size_t size_in_byt
 	{
 		if (is_page_used(&_pm_context, i) == true)
 		{
-			printf(KERROR "Cannot mark a page 'used' which is already marked 'used'. Page Index: %d\n", page_index);
+			printf(KERROR "Cannot mark a page 'used' which is already marked 'used'. Page Index: %ld\n", page_index);
 			return false;
 		}
 
@@ -172,7 +172,7 @@ static uintptr_t find_pages(size_t pages_needed, uintptr_t start_page, uintptr_t
 		}
 	}
 
-	printf(KERROR "Out of memory! Failed to find %d unallocated pages in sequencial order.\n", pages_needed);
+	printf(KERROR "Out of memory! Failed to find %lu unallocated pages in sequencial order.\n", pages_needed);
 	return INVALID_PHYS;
 }
 
@@ -199,7 +199,7 @@ phys_addr_t allocate_memory(const size_t size_in_bytes)
 // Deallocates the physical pages given.
 bool deallocate_memory(const phys_addr_t physical_address, const size_t size_in_bytes)
 {
-	return release_memory(physical_address, size_in_bytes) != INVALID_PHYS;
+	return release_memory(physical_address, size_in_bytes);
 }
 
 struct MEMORY_BITMAP init_physical_memory(void)
@@ -209,8 +209,8 @@ struct MEMORY_BITMAP init_physical_memory(void)
 	size_t total_system_memory_in_bytes = total_system_memory();
 	size_t bitmap_size_in_bytes = bitmap_required_size(total_system_memory_in_bytes);
 
-	printf("\tTotal system memory: %'d bytes\n", total_system_memory_in_bytes);
-	printf("\tTotal pages: %'d\n", total_system_memory_in_bytes / PAGE_BYTE_SIZE);
+	printf("\tTotal system memory: %'ld bytes\n", total_system_memory_in_bytes);
+	printf("\tTotal pages: %'lld\n", total_system_memory_in_bytes / PAGE_BYTE_SIZE);
 
 	struct limine_memmap_entry *suitable_bitmap_entry = NULL;
 
@@ -238,12 +238,12 @@ struct MEMORY_BITMAP init_physical_memory(void)
 
 	printf(KINFO "Setting up memory bitmap...\n");
 	printf("\tBitmap address: %p\n", _pm_context.bitmap);
-	printf("\tBitmap size: %'d bytes\n", _pm_context.bitmap_size);
+	printf("\tBitmap size: %'ld bytes\n", _pm_context.bitmap_size);
 
 	// Mark everything unavailable by default.
 	memset(_pm_context.bitmap, 0xff, _pm_context.bitmap_size);
 
-	printf(KINFO "Releasing usable memory regions...\n", _pm_context.bitmap_size);
+	printf(KINFO "Releasing usable memory regions...\n");
 
 	// Now mark only usable memory regions as available
 	for (uint64_t i = 0; i < memmap_request.response->entry_count; i++)
@@ -257,18 +257,18 @@ struct MEMORY_BITMAP init_physical_memory(void)
 
 		if (release_memory(entry->base, entry->length) == false)
 		{
-			printf(KERROR "Failed to release memory region %p - %p\n", entry->base, entry->base + entry->length - 1);
+			printf(KERROR "Failed to release memory region %#018lx - %#018lx\n", entry->base, entry->base + entry->length - 1);
 			abort("^^^^^^"); // Lol lets make a panic, panicp, and panicpf
 		}
 	}
 
 	if (reserve_memory(suitable_bitmap_entry->base, bitmap_size_in_bytes) == false)
 	{
-		printf(KERROR "Failed to reserve memory region %p - %p\n", suitable_bitmap_entry->base, suitable_bitmap_entry->base + bitmap_size_in_bytes - 1);
+		printf(KERROR "Failed to reserve memory region %#018lx - %#018lx\n", suitable_bitmap_entry->base, suitable_bitmap_entry->base + bitmap_size_in_bytes - 1);
 		abort("^^^^^^"); // Lol lets make a panic, panicp, and panicpf
 	}
 
-	printf("\tUsable free memory: %'d bytes\n", (_pm_context.total_pages - _pm_context.used_pages) * PAGE_BYTE_SIZE);
+	printf("\tUsable free memory: %'llu bytes\n", (_pm_context.total_pages - _pm_context.used_pages) * PAGE_BYTE_SIZE);
 
 	struct MEMORY_BITMAP bitmap = {0};
 

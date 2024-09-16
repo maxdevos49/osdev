@@ -180,7 +180,7 @@ static bool map_page(phys_addr_t physical_address, virt_addr_t virtual_address, 
 	if (pt_entry->present)
 	{
 		// Page is already mapped!
-		printf(KWARN "[WARNING] Page %p is already mapped!\n", physical_address);
+		printf(KWARN "[WARNING] Page %#018lx is already mapped!\n", physical_address);
 		return false;
 	}
 	else
@@ -216,7 +216,7 @@ void print_memory_mapping(void)
 	uint64_t entry_address_mask = (0xffffffffffffffff >> (64 - _vm_context.physical_address_size)) & 0xfffffffffffff000;
 
 	struct PAGE_TABLE *pml4_table = _vm_context.pml4_table;
-	printf("PML4 Table: %p\n", virt_to_phys(pml4_table));
+	printf("PML4 Table: %#018lx\n", virt_to_phys(pml4_table));
 
 	for (uint64_t i = 0; i < 512; i++)
 	{
@@ -228,7 +228,7 @@ void print_memory_mapping(void)
 		}
 
 		struct PAGE_TABLE *pdp_table = get_table_from_entry(pml4_entry);
-		printf("PML4E Index: %3d | PML4E: %p | PDP Table: %p\n", i, *pml4_entry, virt_to_phys(pdp_table));
+		printf("PML4E Index: %3ld | PML4E: %#018lx | PDP Table: %#018lx\n", i, pml4_entry->raw, virt_to_phys(pdp_table));
 
 		for (uint64_t ii = 0; ii < 512; ii++)
 		{
@@ -240,7 +240,7 @@ void print_memory_mapping(void)
 			}
 
 			struct PAGE_TABLE *pd_table = get_table_from_entry(pdp_entry);
-			printf("\tPDPE Index: %3d | PDPE: %p | PD Table: %p\n", ii, *pdp_entry, virt_to_phys(pd_table));
+			printf("\tPDPE Index: %3ld | PDPE: %#018lx | PD Table: %#018lx\n", ii, pdp_entry->raw, virt_to_phys(pd_table));
 
 			for (uint64_t iii = 0; iii < 512; iii++)
 			{
@@ -252,7 +252,7 @@ void print_memory_mapping(void)
 				}
 
 				struct PAGE_TABLE *pt_table = get_table_from_entry(pd_entry);
-				printf("\t\tPDE Index: %3d | PDE: %p | PT Table: %p\n", iii, *pd_entry, virt_to_phys(pt_table));
+				printf("\t\tPDE Index: %3ld | PDE: %#018lx | PT Table: %#018lx\n", iii, pd_entry->raw, virt_to_phys(pt_table));
 
 				for (uint64_t iiii = 0; iiii < 512; iiii++)
 				{
@@ -264,7 +264,7 @@ void print_memory_mapping(void)
 					}
 
 					uintptr_t virtual_address = ((i << 39) | (ii << 30) | (iii << 21) | (iiii << 12)) | (0xffffffffffffffff << _vm_context.virtual_address_size);
-					printf("\t\t\tPTE Index: %3d | PTE: %p | Physical: %p | Virtual: %p\n", iiii, *page_entry, page_entry->raw & entry_address_mask, virtual_address);
+					printf("\t\t\tPTE Index: %3ld | PTE: %#018lx | Physical: %#018lx | Virtual: %#018lx\n", iiii, page_entry->raw, page_entry->raw & entry_address_mask, virtual_address);
 				}
 			}
 		}
@@ -282,7 +282,7 @@ void init_virtual_memory(struct MEMORY_BITMAP bitmap)
 
 	printf("\tSupported physical address bits: %d\n", _vm_context.physical_address_size);
 	printf("\tSupported virtual address bits: %d\n", _vm_context.virtual_address_size);
-	printf("\tHHDM offset: %p\n", hhdm_request.response->offset);
+	printf("\tHHDM offset: %#018lx\n", hhdm_request.response->offset);
 
 	// Start a new PML4 table
 	phys_addr_t pml4_table_physical_address = allocate_memory(1);
@@ -311,7 +311,7 @@ void init_virtual_memory(struct MEMORY_BITMAP bitmap)
 
 	printf("\t%'d pages added to the page pool\n", PT_POOL_SIZE);
 
-	printf(KINFO "Setting up new PML4 table...\n\tPhysical address: %p\n\tVirtual address: %p\n", pml4_table_physical_address, pml4_table_virtual_address);
+	printf(KINFO "Setting up new PML4 table...\n\tPhysical address: %#018lx\n\tVirtual address: %p\n", pml4_table_physical_address, pml4_table_virtual_address);
 
 	printf(KINFO "Populating PML4 table...\n");
 
@@ -354,15 +354,15 @@ void init_virtual_memory(struct MEMORY_BITMAP bitmap)
 		}
 	}
 
-	printf("\t%'d pages mapped into PML4 table\n", pages_mapped);
+	printf("\t%'lu pages mapped into PML4 table\n", pages_mapped);
 
 	printf(KINFO "Transferring to new PML4 table...\n");
 	// Start using new page table
 	uint64_t current_cr3 = read_CR3();
 	uint64_t new_cr3_address = (current_cr3 & 0xFFFULL) | (pml4_table_physical_address & ~0xFFFULL);
-	printf("\tOld CR3 value: %p\n", current_cr3);
+	printf("\tOld CR3 value: %#018lx\n", current_cr3);
 	write_CR3(new_cr3_address);
-	printf("\tNew CR3 value: %p\n", read_CR3());
+	printf("\tNew CR3 value: %#018lx\n", read_CR3());
 
 	printf(KOK "Virtual memory management ready\n");
 }

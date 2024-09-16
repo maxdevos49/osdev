@@ -38,10 +38,10 @@ void print_memory_layout(void)
 
 		total += entry->length;
 
-		printf("\t%-23s %p-%p Length: %'11d bytes\n", MEMORY_MAP_REGION_NAME[entry->type], entry->base, entry->base + entry->length - 1, entry->length);
+		printf("\t%-23s %#018lx-%#018lx Length: %'11lu bytes\n", MEMORY_MAP_REGION_NAME[entry->type], entry->base, entry->base + entry->length - 1, entry->length);
 	}
 
-	printf("Total system memory: %p\n", total);
+	printf("Total system memory: %lu\n", total);
 }
 
 // Init the physical and virtual memory manager

@@ -16,9 +16,6 @@
 #include "interrupts/idt.h"
 #include "string/utility.h"
 
-// TODO list
-// Setup own stack
-// Then claim all bootloader reclaimable memory
 
 ATTR_REQUEST static volatile LIMINE_BASE_REVISION(2);
 

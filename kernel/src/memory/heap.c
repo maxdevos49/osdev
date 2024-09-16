@@ -25,7 +25,7 @@ void print_heap(void)
 	printf("=======Heap report=======\n");
 	do
 	{
-		printf("Block Address: %p Size: %d bytes Status: %s\n", ptr, ptr->length, ptr->free ? "Free" : "Allocated");
+		printf("Block Address: %p Size: %lu bytes Status: %s\n", ptr, ptr->length, ptr->free ? "Free" : "Allocated");
 		printf("\tPrevious:      %p\n\tNext:          %p\n\tNext Free      %p\n", ptr->previous, ptr->next, ptr->next_free);
 		ptr = ptr->next;
 	} while (ptr != NULL);
@@ -51,7 +51,7 @@ void *kmalloc(size_t size)
 	if (block == NULL)
 	{
 		// No sufficient length memory blocks are available
-		printf(KERROR "Aborting! Not enough memory left to malloc %d bytes", size);
+		printf(KERROR "Aborting! Not enough memory left to malloc %'lu bytes", size);
 		abort("Heap out of memory! Time to implement mapping new heap memory");
 		return NULL;
 	}
@@ -177,7 +177,7 @@ void init_heap(void *heap_address, size_t size)
 {
 	printf(KINFO "Initiating kernel heap\n");
 	printf("\tHeap address: %p\n", heap_address);
-	printf("\tInitial Heap size: %'d bytes\n", size);
+	printf("\tInitial Heap size: %'lu bytes\n", size);
 
 	phys_addr_t physical_address = allocate_memory(size);
 	if (physical_address == INVALID_PHYS)

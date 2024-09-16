@@ -17,7 +17,7 @@ int printf(const char *restrict format, ...)
 
 	va_end(args);
 
-	for (int i = 0; i < written; i++)
+	for (size_t i = 0; i < written; i++)
 	{
 		serial_write(buffer[i]);
 	}

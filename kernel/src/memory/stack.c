@@ -18,7 +18,7 @@ void strace(int max_frames)
 
 	for (int i = 0; stack != NULL && stack->rip != 0 && i < max_frames; i++)
 	{
-		printf("\t[%p]\n", stack->rip);
+		printf("\t[%#018lx]\n", stack->rip);
 		stack = stack->rbp;
 	}
 }
