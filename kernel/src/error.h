@@ -1,6 +1,8 @@
 #ifndef __ERROR_H
 #define __ERROR_H 1
 
-void abort(const char *error);
+#include "macro.h"
+
+NO_RETURN void abort(const char *error);
 
 #endif

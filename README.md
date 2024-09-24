@@ -12,6 +12,8 @@ x86_64 kernel with a goal of getting to userspace and porting Doom. Further plan
 - [Ascii Table](https://www.ascii-code.com/)
 - [My first kernel](https://github.com/maxdevos49/MadOS)
 - https://os.phil-opp.com/paging-implementation/#recursive-page-tables
+- https://gcc.gnu.org/wiki/FAQ#configure
+- https://roscopeco.com/2018/11/25/using-gcc-as-cross-compiler-with-x86_64-target/
 
 ## How to use this?
 

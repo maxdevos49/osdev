@@ -15,11 +15,16 @@
 #include "gdt.h"
 #include "interrupts/idt.h"
 #include "string/utility.h"
-
+#include "elf.h"
+#include "dwarf4.h"
 
 ATTR_REQUEST static volatile LIMINE_BASE_REVISION(2);
 
-static void hcf()
+ATTR_REQUEST volatile struct limine_kernel_file_request kernel_file_request = {
+	.id = LIMINE_KERNEL_FILE_REQUEST,
+	.revision = 0};
+
+NO_RETURN static void hcf()
 {
 	for (;;)
 	{
@@ -27,13 +32,15 @@ static void hcf()
 	}
 }
 
-void abort(const char *error)
+NO_RETURN void abort(const char *error)
 {
 	set_stroke(GRAPHICS_get_global_context(), 0xff0000);
 	printf("[ABORT] %s\n", error);
 
 	hcf();
 }
+
+void print_hex_table(void *address, size_t length);
 
 void kmain(void)
 {
@@ -70,6 +77,26 @@ void kmain(void)
 	init_memory();
 	init_gdt();
 	init_idt();
+
+	if (kernel_file_request.response->kernel_file == NULL)
+	{
+		abort("Kernel file not loaded\n");
+	}
+
+	void *kernel_file = kernel_file_request.response->kernel_file->address;
+	// size_t kernel_file_size = kernel_file_request.response->kernel_file->size;
+
+	Elf64_Ehdr *elf_header = NULL;
+	if (elf64_header(kernel_file, &elf_header))
+		abort("elf64_header error");
+
+	elf64_print_header(elf_header);
+	elf64_print_section_headers(elf_header);
+
+	struct DWARF_CONTEXT *dwarf_ctx = dwarf4_init_context(elf_header);
+	// dwarf4_print_compilation(dwarf_ctx, 0x182);
+
+	// TODO: Parse debug section
 
 	printf(KINFO "Done. Halting\n");
 	hcf();

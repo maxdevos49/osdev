@@ -22,7 +22,9 @@ override KCFLAGS += \
 	-fno-PIC \
 	-ffunction-sections \
 	-fdata-sections \
-	-g \
+	-gdwarf-4 \
+	-gdwarf64 \
+	-gstrict-dwarf\
 	-pipe \
 	-m64 \
 	-march=x86-64 \
@@ -43,8 +45,7 @@ override KCPPFLAGS := \
 # Internal nasm flags that should not be changed by the user.
 override KNASMFLAGS += \
 	-Wall \
-	-F dwarf\
-	-g \
+	-gdwarf \
 	-f elf64\
 	-w-reloc-rel-dword \
 	-w-reloc-abs-dword

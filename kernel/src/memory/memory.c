@@ -7,7 +7,7 @@
 #include "../macro.h"
 #include "../string/utility.h"
 
-#define HEAP_INITIAL_SIZE (0x1000 * 20)
+#define HEAP_INITIAL_SIZE (0x1000 * 5)
 
 extern char kernel_end; // Last address in the kernel
 
