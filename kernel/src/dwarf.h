@@ -1,62 +1,77 @@
-#ifndef __DWARF4_H
-#define __DWARF4_H
+#ifndef __DWARF_H
+#define __DWARF_H
 
-#include <stdint.h>
-#include "type.h"
-#include "macro.h"
 #include "elf.h"
+#include "leb128.h"
+#include "macro.h"
+#include "type.h"
+#include <stdint.h>
 
 ///
-/// DWARF 4: Specification https://dwarfstd.org/doc/DWARF4.pdf
+/// DWARF 5: Specification https://dwarfstd.org/doc/DWARF5.pdf
 ///
-/// Introduction to Dwarf: https://dwarfstd.org/doc/Debugging-using-DWARF-2012.pdf
-///
-/// This file defines structures and types required to implement DWARF 4's 64 bit
-/// format.
+/// Introduction to Dwarf:
+/// https://dwarfstd.org/doc/Debugging-using-DWARF-2012.pdf
 ///
 
-// Header representing data in ".debug_info" section. Specification Pg: 143
-struct DWARF4_COMPILATION_HEADER
-{
-	uint32_t dwarf_64_format;	  /* Always has the value 0xffffffff to alert debuggers this unit is 64-bits */
-	uint64_t unit_length;		  /* The actual unit length*/
-	uint16_t version;			  /* DWARF version number */
-	uint64_t debug_abbrev_offset; /* A offset into the .debug_abbrev section */
-	uint8_t address_size;		  /* Size in bytes of an address on the target architecture */
-} ATTR_PACK;
+// Note: Used for the implementation. Not from the spec.
+enum DW_ERROR_CODE {
+	DW_ERROR_UNSUPPORTED_VERSION = 1, /* DWARF version is unsupported */
+	DW_ERROR_UNSUPPORTED_HEADER,	  /* DWARF header state or structure is
+										 unsupported. */
+	DW_ERROR_INVALID_HEADER,		  /* DWARF header is invalid or malformed */
+	DW_ERROR_INVALID_UNIT,			  /* DWARF data is invalid or malformed */
+	DW_ERROR_FAILED_BOUND_CHECK, /* Data was attempted to be read outside of a
+							   units bounds. */
+};
 
-//
-// Header representing data in ".debug_aranges" section. Specification Pg: 177
-//
-struct DWARF4_ADDRESS_RANGE_HEADER
-{
-	uint32_t dwarf_64_format;	/* Always has the value 0xffffffff to alert debuggers this unit is 64-bits */
-	uint64_t unit_length;		/* The actual unit length*/
-	uint16_t version;			/* DWARF version number */
-	uint64_t debug_info_offset; /* Offset into .debug_info table for relevant compilation unit */
-	uint8_t address_size;		/* Size in bytes of a address on the target system */
-	uint8_t segment_size;		/* Size in bytes of the segment selector on the target system */
-} ATTR_PACK;
+// Header representing data in ".debug_aranges" section. Specification Pg: 235
+typedef struct DWARF_ADDRESS_RANGE_HEADER {
+	uint32_t length; /* The unit length. This length starts after this field! */
+	uint16_t version;			/* Version number which should be 2 */
+	uint32_t debug_info_offset; /* Offset into .debug_info table for relevant
+								   compilation unit */
+	uint8_t address_size; /* Size in bytes of a address on the target system */
+	uint8_t segment_size; /* Size in bytes of the segment selector on the target
+							 system */
+} ATTR_PACK DW_ARhdr;
 
-// Header representing data in .debug_line section // TODO pg num?
-struct DWARF4_LINE_HEADER
-{
-	uint32_t dwarf_64_format;					/* Always has the value 0xffffffff to alert debuggers this unit is 64-bits */
-	uint64_t unit_length;						/* The actual unit length*/
-	uint16_t version;							/* DWARF version number */
-	uint64_t header_length;						/* Length of this header to the first byte of the line program */
-	uint8_t minimum_instruction_length;			/* Size in bytes of the smallest target machine instruction. */
-	uint8_t maximum_operations_per_instruction; /* Maximum number of individual operations that may be encoded in an instruction. */
-	uint8_t default_is_stmt;					// TODO add descriptions
-	int8_t line_base;
-	uint8_t line_range;
-	uint8_t opcode_base;
-	uint8_t standard_opcode_lengths[12];
-} ATTR_PACK;
+// Header representing data in ".debug_info" section. Specification Pg: 200
+typedef struct DWARF_COMPILATION_HEADER {
+	uint32_t length;	  /* The unit length starting after this field. */
+	uint16_t version;	  /* DWARF version number */
+	uint8_t unit_type;	  /* Indicates compilation unit type. Partial or Full*/
+	uint8_t address_size; /* Size in bytes of an address on the target
+							 architecture */
+	uint32_t debug_abbrev_offset; /* A offset into the .debug_abbrev section */
+} ATTR_PACK DW_Chdr;
 
-enum DW_TAG
-{
-	// Pg: 151
+// Header representing data in .debug_line section Specification Pg: // TODO
+// typedef struct DWARF_LINE_HEADER {
+// 	uint32_t unit_length;	/* The unit length*/
+// 	uint16_t version;		/* DWARF version number */
+// 	uint32_t header_length; /* Length of this header to the first byte of the
+// 							   line program */
+// 	uint8_t minimum_instruction_length; /* Size in bytes of the smallest target
+// 										   machine instruction. */
+// 	uint8_t maximum_operations_per_instruction; /* Maximum number of individual
+// 												   operations that may be
+// 												   encoded in an instruction. */
+// 	uint8_t default_is_stmt;
+// 	int8_t line_base;
+// 	uint8_t line_range;
+// 	uint8_t opcode_base;
+// 	uint8_t standard_opcode_lengths[12];
+// } ATTR_PACK DW_Lhdr;
+
+enum DW_UT {
+	// Pg: 199
+	DW_UT_compile = 0x01,
+	// ... others unused
+};
+
+enum DW_TAG {
+	// Pg: //TODO
 	DW_TAG_array_type = 0x01,
 	DW_TAG_class_type = 0x02,
 	DW_TAG_entry_point = 0x03,
@@ -73,7 +88,7 @@ enum DW_TAG
 	DW_TAG_structure_type = 0x13,
 	DW_TAG_subroutine_type = 0x15,
 	DW_TAG_typedef = 0x16,
-	// Pg: 152
+	// Pg: //TODO
 	DW_TAG_union_type = 0x17,
 	DW_TAG_unspecified_parameters = 0x18,
 	DW_TAG_variant = 0x19,
@@ -94,7 +109,7 @@ enum DW_TAG
 	DW_TAG_enumerator = 0x28,
 	DW_TAG_file_type = 0x29,
 	DW_TAG_friend = 0x2a,
-	// Pg: 153
+	// Pg: //TODO
 	DW_TAG_namelist = 0x2b,
 	DW_TAG_namelist_item = 0x2c,
 	DW_TAG_packed_type = 0x2d,
@@ -115,7 +130,7 @@ enum DW_TAG
 	DW_TAG_partial_unit = 0x3c,
 	DW_TAG_imported_unit = 0x3d,
 	DW_TAG_condition = 0x3f,
-	// Pg: 154
+	// Pg: //TODO
 	DW_TAG_shared_type = 0x40,
 	DW_TAG_type_unit = 0x41,
 	DW_TAG_rvalue_reference_type = 0x42,
@@ -124,16 +139,14 @@ enum DW_TAG
 	DW_TAG_hi_user = 0xffff
 };
 
-enum DW_CHILDREN
-{
-	// Pg: 154
+enum DW_CHILDREN {
+	// Pg: //TODO
 	DW_CHILDREN_no = 0x00,
 	DW_CHILDREN_yes = 0x01
 };
 
-enum DW_AT
-{
-	// Pg: 155
+enum DW_AT {
+	// Pg: //TODO
 	DW_AT_sibling = 0x01,
 	DW_AT_location = 0x02,
 	DW_AT_name = 0x03,
@@ -154,7 +167,7 @@ enum DW_AT
 	DW_AT_comp_dir = 0x1b,
 	DW_AT_const_value = 0x1c,
 	DW_AT_containing_type = 0x1d,
-	// Pg: 156
+	// Pg: //TODO
 	DW_AT_default_value = 0x1d,
 	DW_AT_inline = 0x1e,
 	DW_AT_is_optional = 0x20,
@@ -174,7 +187,7 @@ enum DW_AT
 	DW_AT_count = 0x37,
 	DW_AT_data_member_location = 0x38,
 	DW_AT_decl_column = 0x39,
-	// Pg: 157
+	// Pg: //TODO
 	DW_AT_decl_file = 0x3a,
 	DW_AT_decl_line = 0x3b,
 	DW_AT_declaration = 0x3c,
@@ -195,7 +208,7 @@ enum DW_AT
 	DW_AT_variable_parameter = 0x4b,
 	DW_AT_virtuality = 0x4c,
 	DW_AT_vtable_elem_location = 0x4d,
-	// Pg: 158
+	// Pg: //TODO
 	DW_AT_allocated = 0x4e,
 	DW_AT_associated = 0x4f,
 	DW_AT_data_location = 0x50,
@@ -216,7 +229,7 @@ enum DW_AT
 	DW_AT_digit_count = 0x5f,
 	DW_AT_picture_string = 0x60,
 	DW_AT_mutable = 0x61,
-	// Pg: 159
+	// Pg: //TODO
 	DW_AT_threads_scaled = 0x62,
 	DW_AT_explicit = 0x63,
 	DW_AT_object_pointer = 0x64,
@@ -234,9 +247,8 @@ enum DW_AT
 	DW_AT_hi_user = 0x3fff,
 };
 
-// Dwarf Information format: Pg 160
-enum DW_FORM
-{
+enum DW_FORM {
+	// Pg: 220
 	DW_FORM_addr = 0x01,
 	DW_FORM_block2 = 0x03,
 	DW_FORM_block4 = 0x04,
@@ -261,26 +273,36 @@ enum DW_FORM
 	DW_FORM_sec_offset = 0x17,
 	DW_FORM_exprloc = 0x18,
 	DW_FORM_flag_present = 0x19,
+	DW_FORM_line_strp = 0x1f,
 	DW_FORM_ref_sig8 = 0x20,
+	DW_FORM_implicit_const = 0x21,
 	// TODO more
 };
 
-enum DW_OP
-{
-	// Pg: 163
-	DW_OP_addr = 0x03, /* No. of Operands: 1. Notes: Constant address size target specific*/
+enum DW_OP {
+	// Pg: //TODO
+	DW_OP_addr = 0x03, /* No. of Operands: 1. Notes: Constant address size
+						  target specific*/
 	DW_OP_deref = 0x06,
-	// Pg: 163
-	DW_OP_const1u = 0x08, /* No. of Operands: 1. Notes: 1-byte unsigned constant */
-	DW_OP_const1s = 0x09, /* No. of Operands: 1. Notes: 1-byte signed constant */
-	DW_OP_const2u = 0x0a, /* No. of Operands: 1. Notes: 2-byte unsigned constant */
-	DW_OP_const2s = 0x0b, /* No. of Operands: 1. Notes: 2-byte signed constant */
-	DW_OP_const4u = 0x0c, /* No. of Operands: 1. Notes: 4-byte unsigned constant */
-	DW_OP_const4s = 0x0d, /* No. of Operands: 1. Notes: 4-byte signed constant */
-	DW_OP_const8u = 0x0e, /* No. of Operands: 1. Notes: 8-byte unsigned constant */
-	DW_OP_const8s = 0x0f, /* No. of Operands: 1. Notes: 8-byte signed constant */
-	DW_OP_constu = 0x10,  /* No. of Operands: 1. Notes: ULEB128 constant */
-	DW_OP_consts = 0x11,  /* No. of Operands: 1. Notes: SLEB128 constant */
+	// Pg: //TODO
+	DW_OP_const1u =
+		0x08, /* No. of Operands: 1. Notes: 1-byte unsigned constant */
+	DW_OP_const1s =
+		0x09, /* No. of Operands: 1. Notes: 1-byte signed constant */
+	DW_OP_const2u =
+		0x0a, /* No. of Operands: 1. Notes: 2-byte unsigned constant */
+	DW_OP_const2s =
+		0x0b, /* No. of Operands: 1. Notes: 2-byte signed constant */
+	DW_OP_const4u =
+		0x0c, /* No. of Operands: 1. Notes: 4-byte unsigned constant */
+	DW_OP_const4s =
+		0x0d, /* No. of Operands: 1. Notes: 4-byte signed constant */
+	DW_OP_const8u =
+		0x0e, /* No. of Operands: 1. Notes: 8-byte unsigned constant */
+	DW_OP_const8s =
+		0x0f,			 /* No. of Operands: 1. Notes: 8-byte signed constant */
+	DW_OP_constu = 0x10, /* No. of Operands: 1. Notes: ULEB128 constant */
+	DW_OP_consts = 0x11, /* No. of Operands: 1. Notes: SLEB128 constant */
 	DW_OP_dup = 0x12,
 	DW_OP_drop = 0x13,
 	DW_OP_over = 0x14,
@@ -291,7 +313,7 @@ enum DW_OP
 	DW_OP_abs = 0x19,
 	DW_OP_and = 0x1a,
 	DW_OP_div = 0x1b,
-	// Pg: 165
+	// Pg: //TODO
 	DW_OP_minus = 0x1c,
 	DW_OP_mod = 0x1d,
 	DW_OP_mul = 0x1e,
@@ -312,7 +334,7 @@ enum DW_OP
 	DW_OP_le = 0x2c,
 	DW_OP_lt = 0x2d,
 	DW_OP_ne = 0x2e,
-	// Pg: 166
+	// Pg: //TODO
 	DW_OP_lit0 = 0x30,
 	DW_OP_lit1 = 0x31,
 	DW_OP_lit2 = 0x32,
@@ -379,69 +401,76 @@ enum DW_OP
 	DW_OP_reg30 = 0x6E,
 	DW_OP_reg31 = 0x6F,
 
-	DW_OP_breg0 = 0x70,		  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg1 = 0x71,		  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg2 = 0x72,		  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg3 = 0x73,		  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg4 = 0x74,		  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg5 = 0x75,		  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg6 = 0x76,		  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg7 = 0x77,		  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg8 = 0x78,		  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg9 = 0x79,		  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg10 = 0x7A,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg11 = 0x7B,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg12 = 0x7C,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg13 = 0x7D,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg14 = 0x7E,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg15 = 0x7F,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg16 = 0x80,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg17 = 0x81,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg18 = 0x82,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg19 = 0x83,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg20 = 0x84,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg21 = 0x85,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg22 = 0x86,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg23 = 0x87,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg24 = 0x88,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg25 = 0x89,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg26 = 0x8A,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg27 = 0x8B,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg28 = 0x8C,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg29 = 0x8D,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg30 = 0x8E,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_breg31 = 0x8F,	  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_regx = 0x90,		  /* No. of Operands: 1. ULEB128 register */
-	DW_OP_fbreg = 0x91,		  /* No. of Operands: 1. SLEB128 offset */
-	DW_OP_bregx = 0x92,		  /* No. of Operands: 2. ULEB128 register followed by SLEB128 offset */
-	DW_OP_piece = 0x93,		  /* No. of Operands: 1. ULEB128 size of piece addressed */
-	DW_OP_deref_size = 0x94,  /* No. of Operands: 1. 1-byte size of data retrieved */
-	DW_OP_xderef_size = 0x95, /* No. of Operands: 1. 1 byte size of data retrieved */
+	DW_OP_breg0 = 0x70,	 /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg1 = 0x71,	 /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg2 = 0x72,	 /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg3 = 0x73,	 /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg4 = 0x74,	 /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg5 = 0x75,	 /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg6 = 0x76,	 /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg7 = 0x77,	 /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg8 = 0x78,	 /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg9 = 0x79,	 /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg10 = 0x7A, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg11 = 0x7B, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg12 = 0x7C, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg13 = 0x7D, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg14 = 0x7E, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg15 = 0x7F, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg16 = 0x80, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg17 = 0x81, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg18 = 0x82, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg19 = 0x83, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg20 = 0x84, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg21 = 0x85, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg22 = 0x86, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg23 = 0x87, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg24 = 0x88, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg25 = 0x89, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg26 = 0x8A, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg27 = 0x8B, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg28 = 0x8C, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg29 = 0x8D, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg30 = 0x8E, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_breg31 = 0x8F, /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_regx = 0x90,	 /* No. of Operands: 1. ULEB128 register */
+	DW_OP_fbreg = 0x91,	 /* No. of Operands: 1. SLEB128 offset */
+	DW_OP_bregx = 0x92,	 /* No. of Operands: 2. ULEB128 register followed by
+							SLEB128 offset */
+	DW_OP_piece =
+		0x93, /* No. of Operands: 1. ULEB128 size of piece addressed */
+	DW_OP_deref_size =
+		0x94, /* No. of Operands: 1. 1-byte size of data retrieved */
+	DW_OP_xderef_size =
+		0x95, /* No. of Operands: 1. 1 byte size of data retrieved */
 	DW_OP_nop = 0x96,
-	// Pg: 167
+	// Pg: //TODO
 	DW_OP_push_object_address = 0x97,
 	DW_OP_call2 = 0x98,	   /* No. of Operands: 1. 2-byte offset of DIE */
 	DW_OP_call4 = 0x99,	   /* No. of Operands: 1. 4-byte offset of DIE */
 	DW_OP_call_ref = 0x9a, /* No. of Operands: 1. 4- or 8-byte offset of DIE */
 	DW_OP_form_tls_address = 0x9b,
 	DW_OP_call_frame_cfa = 0x9c,
-	DW_OP_bit_piece = 0x9d,		 /* No. of Operands: 2. ULEB128 size followed by ULEB128 offset */
-	DW_OP_implicit_value = 0x9e, /* No. of Operands: 2. ULEB128 size followed by block of that size */
+	DW_OP_bit_piece =
+		0x9d, /* No. of Operands: 2. ULEB128 size followed by ULEB128 offset */
+	DW_OP_implicit_value = 0x9e, /* No. of Operands: 2. ULEB128 size followed by
+									block of that size */
 	DW_OP_stack_value = 0x9f,
 	DW_OP_lo_user = 0xe0,
 	DW_OP_hi_user = 0xff,
 };
 
-struct DWARF_CONTEXT;
+typedef struct DWARF_CONTEXT DW_Ctx;
 
-struct DWARF_CONTEXT *dwarf4_init_context(const Elf64_Ehdr *restrict elf_header);
+DW_Ctx *dwarf_init_context(const Elf64_Ehdr *restrict elf_header);
 
-void dwarf4_print_compilation(struct DWARF_CONTEXT *ctx, uint64_t offset);
-// void dwarf4_print_address_range(struct DWARF4_ADDRESS_RANGE_HEADER *header);
-// void dwarf4_print_line(struct DWARF4_LINE_HEADER *header);
-void dwarf4_compilation_unit_for_address(struct DWARF_CONTEXT *ctx, uintptr_t address);
+err_code dwarf_cu_for_address(const DW_Ctx *restrict ctx,
+							  const uintptr_t instruction_address,
+							  DW_Chdr **compilation_unit_header);
 
-uint64_t decode_uleb128(uint8_t **stream);
-int64_t decode_sleb128(uint8_t **stream, size_t bit_size);
+err_code dwarf_cu_query_func(const DW_Ctx *restrict ctx,
+							 const DW_Chdr *compilation_unit,
+							 const uintptr_t instruction_address,
+							 char **symbol_string);
 
 #endif

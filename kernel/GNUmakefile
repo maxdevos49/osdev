@@ -22,9 +22,7 @@ override KCFLAGS += \
 	-fno-PIC \
 	-ffunction-sections \
 	-fdata-sections \
-	-gdwarf-4 \
-	-gdwarf64 \
-	-gstrict-dwarf\
+	-g \
 	-pipe \
 	-m64 \
 	-march=x86-64 \
