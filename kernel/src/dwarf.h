@@ -16,13 +16,12 @@
 
 // Note: Used for the implementation. Not from the spec.
 enum DW_ERROR_CODE {
-	DW_ERROR_UNSUPPORTED_VERSION = 1, /* DWARF version is unsupported */
+
+	DW_ERROR_UNSUPPORTED_VERSION = 0xff, /* DWARF version is unsupported */
 	DW_ERROR_UNSUPPORTED_HEADER,	  /* DWARF header state or structure is
 										 unsupported. */
 	DW_ERROR_INVALID_HEADER,		  /* DWARF header is invalid or malformed */
 	DW_ERROR_INVALID_UNIT,			  /* DWARF data is invalid or malformed */
-	DW_ERROR_FAILED_BOUND_CHECK, /* Data was attempted to be read outside of a
-							   units bounds. */
 };
 
 // Header representing data in ".debug_aranges" section. Specification Pg: 235

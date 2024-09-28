@@ -1,4 +1,5 @@
 #include "dwarf.h"
+#include "debug.h"
 #include "elf.h"
 #include "error.h"
 #include "memory/heap.h"
@@ -23,8 +24,8 @@ struct DWARF_CONTEXT {
 };
 
 struct DIE_ATTRIBUTE {
-	uint16_t attribute_name_code;
-	uint16_t attribute_form_code;
+	uint16_t name_code;
+	uint16_t form_code;
 	// Value should be interpreted based on the form_code value. This might be a
 	// pointer or a simple integer value.
 	uint64_t value;
@@ -44,7 +45,7 @@ static inline struct DIE_ATTRIBUTE *_die_attribute(struct DIE *die,
 												   enum DW_AT attribute_code)
 {
 	for (int i = 0; i < die->attribute_count; i++) {
-		if (die->attributes[i].attribute_name_code == attribute_code) {
+		if (die->attributes[i].name_code == attribute_code) {
 			return &die->attributes[i];
 		}
 	}
@@ -60,53 +61,62 @@ static err_code _abbrev_table_entry(const uint32_t target_abbrev_code,
 									void **abbrev_ptr,
 									uintptr_t *abbrev_ptr_end)
 {
+	err_code err;
+
 	do {
 		void *abbrev_start = *abbrev_ptr;
 
-		uint32_t abbrev_code = DECODE_ULEB128(abbrev_ptr, uint32_t);
-		if ((uintptr_t)*abbrev_ptr >= *abbrev_ptr_end) {
-			return DW_ERROR_FAILED_BOUND_CHECK;
+		uint32_t abbrev_code;
+		if ((err = leb128_to_u32(abbrev_ptr, *abbrev_ptr_end, &abbrev_code))) {
+			debug_code(err);
+			return err;
 		}
 
 		// The goal of the remaining code here is to find the end of the
 		// abbreviation.
 
-		// Read past tag_code
-		decode_uleb128((uint8_t **)abbrev_ptr);
-		if ((uintptr_t)*abbrev_ptr >= *abbrev_ptr_end) {
-			return DW_ERROR_FAILED_BOUND_CHECK;
+		// Read past the tag code
+		uint64_t tag_code = 0;
+		if ((err = leb128_to_u64(abbrev_ptr, *abbrev_ptr_end, &tag_code))) {
+			debug_code(err);
+			return err;
 		}
 
 		// Read past has_children byte.
-		*abbrev_ptr += sizeof(uint8_t);
-		if ((uintptr_t)*abbrev_ptr >= *abbrev_ptr_end) {
-			return DW_ERROR_FAILED_BOUND_CHECK;
+		if ((uintptr_t)*abbrev_ptr + sizeof(uint8_t) >= *abbrev_ptr_end) {
+			debug_code(ERROR_OUT_OF_BOUNDS);
+			return ERROR_OUT_OF_BOUNDS;
 		}
+		*abbrev_ptr += sizeof(uint8_t);
 
 		// Find the end of the attributes
 		do {
-			uint16_t attribute_name_code = DECODE_ULEB128(abbrev_ptr, uint16_t);
-			if ((uintptr_t)*abbrev_ptr >= *abbrev_ptr_end) {
-				return DW_ERROR_FAILED_BOUND_CHECK;
+			uint16_t attribute = 0;
+			if ((err =
+					 leb128_to_u16(abbrev_ptr, *abbrev_ptr_end, &attribute))) {
+				debug_code(err);
+				return err;
 			}
 
-			uint16_t attribute_form_code = DECODE_ULEB128(abbrev_ptr, uint16_t);
-			if ((uintptr_t)*abbrev_ptr >= *abbrev_ptr_end) {
-				return DW_ERROR_FAILED_BOUND_CHECK;
+			uint16_t form = 0;
+			if ((err = leb128_to_u16(abbrev_ptr, *abbrev_ptr_end, &form))) {
+				debug_code(err);
+				return err;
 			}
 
 			// Pg: 207 Ln: 11
 			// The form "DW_FORM_implicit_const" has a constant value stored
 			// within the .debug_abbrev data instead of the .debug_info section
-			if (attribute_form_code == DW_FORM_implicit_const) {
-				decode_sleb128((uint8_t **)abbrev_ptr, sizeof(uint32_t));
+			if (form == DW_FORM_implicit_const) {
 
-				if ((uintptr_t)*abbrev_ptr >= *abbrev_ptr_end) {
-					return DW_ERROR_FAILED_BOUND_CHECK;
+				int64_t temp = 0;
+				if ((err = leb128_to_s64(abbrev_ptr, *abbrev_ptr_end, &temp))) {
+					debug_code(err);
+					return err;
 				}
 			}
 
-			if (attribute_name_code == 0 && attribute_form_code == 0) {
+			if (attribute == 0 && form == 0) {
 				break;
 			}
 
@@ -271,118 +281,130 @@ static err_code _next_die(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 						  void **info_ptr, const uintptr_t info_ptr_end,
 						  struct DIE *die_output)
 {
+	err_code err = 0;
+
 	// ".debug_info" section abbreviation code.
-	uint32_t target_abbrev_code = DECODE_ULEB128(info_ptr, uint32_t);
+	uint32_t target_abbrev_code = 0;
+	if ((err = leb128_to_u32(info_ptr, info_ptr_end, &target_abbrev_code))) {
+		debug_code(err);
+		return err;
+	}
 
 	die_output->abbreviation_code = target_abbrev_code;
 
-	if (target_abbrev_code == 0) {
+	if (target_abbrev_code == 0)
 		return 0;
-	}
-
-	if (*(uintptr_t *)info_ptr >= info_ptr_end) {
-		return DW_ERROR_FAILED_BOUND_CHECK;
-	}
 
 	void *abbrev_ptr = ctx->debug_abbrev + cu->debug_abbrev_offset;
 	uintptr_t abbrev_ptr_end =
 		(uintptr_t)ctx->debug_abbrev + ctx->debug_abbrev_size;
 
-	err_code error =
-		_abbrev_table_entry(target_abbrev_code, &abbrev_ptr, &abbrev_ptr_end);
-	if (error) {
-		return error;
+	if ((err = _abbrev_table_entry(target_abbrev_code, &abbrev_ptr,
+								   &abbrev_ptr_end))) {
+		debug_code(err);
+		return err;
 	}
 
 	// `_abbrev_table_entry` does not return an error code for simply not
-	// finding an entry so we check.
-	if (abbrev_ptr == NULL || abbrev_ptr_end == 0) {
+	// finding an entry so we need to check the pointer and size.
+	if (abbrev_ptr == NULL || abbrev_ptr_end == 0)
 		return DW_ERROR_INVALID_UNIT;
-	}
 
 	// ".debug_abbrev" section abbreviation code.
-	uint32_t abbrev_code = DECODE_ULEB128(&abbrev_ptr, uint32_t);
-	if (*(uintptr_t *)abbrev_ptr >= abbrev_ptr_end) {
-		return DW_ERROR_FAILED_BOUND_CHECK;
+	uint32_t abbrev_code = 0;
+	if ((err = leb128_to_u32(&abbrev_ptr, abbrev_ptr_end, &abbrev_code))) {
+		debug_code(err);
+		return err;
 	}
 
-	if (target_abbrev_code != abbrev_code) {
+	if (target_abbrev_code != abbrev_code)
 		return DW_ERROR_INVALID_UNIT;
-	}
 
-	uint16_t tag_code = DECODE_ULEB128(&abbrev_ptr, uint16_t);
-	if (*(uintptr_t *)abbrev_ptr >= abbrev_ptr_end) {
-		return DW_ERROR_FAILED_BOUND_CHECK;
+	uint16_t tag_code = 0;
+	if ((err = leb128_to_u16(&abbrev_ptr, abbrev_ptr_end, &tag_code))) {
+		debug_code(err);
+		return err;
 	}
 
 	die_output->tag_code = tag_code;
 
 	uint8_t has_children = *(uint8_t *)abbrev_ptr;
-	abbrev_ptr += sizeof(uint8_t);
-	if (*(uintptr_t *)abbrev_ptr >= abbrev_ptr_end) {
-		return DW_ERROR_FAILED_BOUND_CHECK;
+
+	if (*(uintptr_t *)abbrev_ptr + sizeof(uint8_t) >= abbrev_ptr_end) {
+		debug_code(ERROR_OUT_OF_BOUNDS);
+		return ERROR_OUT_OF_BOUNDS;
 	}
+	abbrev_ptr += sizeof(uint8_t);
 
 	die_output->has_children = has_children;
 
 	int i = 0;
 	do {
-		uint16_t attribute_name_code = DECODE_ULEB128(&abbrev_ptr, uint16_t);
-		if (*(uintptr_t *)abbrev_ptr >= abbrev_ptr_end) {
-			return DW_ERROR_FAILED_BOUND_CHECK;
+		uint16_t attribute = 0;
+		if ((err = leb128_to_u16(&abbrev_ptr, abbrev_ptr_end, &attribute))) {
+			debug_code(err);
+			return err;
 		}
 
-		uint16_t attribute_form_code = DECODE_ULEB128(&abbrev_ptr, uint16_t);
-		if (*(uintptr_t *)abbrev_ptr >= abbrev_ptr_end) {
-			return DW_ERROR_FAILED_BOUND_CHECK;
+		uint16_t form = 0;
+		if ((err = leb128_to_u16(&abbrev_ptr, abbrev_ptr_end, &form))) {
+			debug_code(err);
+			return err;
 		}
 
-		if (attribute_name_code == 0 && attribute_form_code == 0) {
+		if (attribute == 0 && form == 0) {
 			break;
 		}
 
-		die_output->attributes[i].attribute_name_code = attribute_name_code;
-		die_output->attributes[i].attribute_form_code = attribute_form_code;
+		die_output->attributes[i].name_code = attribute;
+		die_output->attributes[i].form_code = form;
 
-		if (attribute_form_code == DW_FORM_implicit_const) {
+		if (form == DW_FORM_implicit_const) {
 			// Pg: 207 Ln: 11
 			// The form "DW_FORM_implicit_const" has a constant value stored
 			// within the .debug_abbrev data instead of the .debug_info section
-			int32_t value = DECODE_SLEB128(&abbrev_ptr, uint32_t);
-
-			if ((uintptr_t)abbrev_ptr >= abbrev_ptr_end) {
-				return DW_ERROR_FAILED_BOUND_CHECK;
+			int64_t constant = 0;
+			if ((err = leb128_to_s64(&abbrev_ptr, abbrev_ptr_end, &constant))) {
+				debug_code(err);
+				return err;
 			}
 
-			die_output->attributes[i].value = (uint64_t)value;
+			die_output->attributes[i].value = (uint64_t)constant;
 		} else {
-			switch (attribute_form_code) {
+			switch (form) {
 
 			//
 			// String class form. Pg: 218 Ln : 15
 			//
 			case DW_FORM_line_strp:
 			case DW_FORM_strp: {
-				if (*(uintptr_t *)info_ptr + sizeof(uint32_t) >= info_ptr_end) {
-					return DW_ERROR_FAILED_BOUND_CHECK;
+				uint32_t str_offset = 0;
+
+				if (*(uintptr_t *)info_ptr + sizeof(str_offset) >
+					info_ptr_end) {
+					debug_code(ERROR_OUT_OF_BOUNDS);
+					return ERROR_OUT_OF_BOUNDS;
 				}
 
-				uint32_t str_offset = **(uint32_t **)info_ptr;
-				*info_ptr += sizeof(uint32_t);
-
+				str_offset = **(uint32_t **)info_ptr;
 				die_output->attributes[i].value = (uint64_t)str_offset;
+
+				*info_ptr += sizeof(str_offset);
 				break;
 			}
 			case DW_FORM_string: {
 				char *str = *(char **)info_ptr;
+
 				size_t str_len = strlen(str) + 1;
-				if (*(uintptr_t *)info_ptr + str_len >= info_ptr_end) {
-					return DW_ERROR_FAILED_BOUND_CHECK;
+				if (*(uintptr_t *)info_ptr + str_len > info_ptr_end) {
+					debug_code(ERROR_OUT_OF_BOUNDS);
+					return ERROR_OUT_OF_BOUNDS;
 				}
+
+				die_output->attributes[i].value = (uintptr_t)str;
 
 				*info_ptr += str_len;
 
-				die_output->attributes[i].value = (uintptr_t)str;
 				break;
 			}
 
@@ -390,43 +412,59 @@ static err_code _next_die(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 			// Constant class form. Specification Pg: 214 Ln: 8
 			//
 			case DW_FORM_data1: {
-				if (*(uintptr_t *)info_ptr + sizeof(uint8_t) >= info_ptr_end) {
-					return DW_ERROR_FAILED_BOUND_CHECK;
-				}
-				uint8_t value = **((uint8_t **)info_ptr);
-				*info_ptr += sizeof(uint8_t);
+				uint8_t value = 0;
 
+				if (*(uintptr_t *)info_ptr + sizeof(value) > info_ptr_end) {
+					debug_code(ERROR_OUT_OF_BOUNDS);
+					return ERROR_OUT_OF_BOUNDS;
+				}
+
+				value = **((uint8_t **)info_ptr);
 				die_output->attributes[i].value = (uint64_t)value;
+
+				*info_ptr += sizeof(value);
 				break;
 			}
 			case DW_FORM_data2: {
-				if (*(uintptr_t *)info_ptr + sizeof(uint16_t) >= info_ptr_end) {
-					return DW_ERROR_FAILED_BOUND_CHECK;
-				}
-				uint16_t value = **((uint16_t **)info_ptr);
-				*info_ptr += sizeof(uint16_t);
+				uint16_t value = 0;
 
+				if (*(uintptr_t *)info_ptr + sizeof(value) > info_ptr_end) {
+					debug_code(ERROR_OUT_OF_BOUNDS);
+					return ERROR_OUT_OF_BOUNDS;
+				}
+
+				value = **((uint16_t **)info_ptr);
 				die_output->attributes[i].value = (uint64_t)value;
+
+				*info_ptr += sizeof(value);
 				break;
 			}
 			case DW_FORM_data4: {
-				if (*(uintptr_t *)info_ptr + sizeof(uint32_t) >= info_ptr_end) {
-					return DW_ERROR_FAILED_BOUND_CHECK;
-				}
-				uint32_t value = **((uint32_t **)info_ptr);
-				*info_ptr += sizeof(uint32_t);
+				uint32_t value = 0;
 
+				if (*(uintptr_t *)info_ptr + sizeof(value) > info_ptr_end) {
+					debug_code(ERROR_OUT_OF_BOUNDS);
+					return ERROR_OUT_OF_BOUNDS;
+				}
+
+				value = **((uint32_t **)info_ptr);
 				die_output->attributes[i].value = (uint64_t)value;
+
+				*info_ptr += sizeof(value);
 				break;
 			}
 			case DW_FORM_data8: {
-				if (*(uintptr_t *)info_ptr + sizeof(uint64_t) >= info_ptr_end) {
-					return DW_ERROR_FAILED_BOUND_CHECK;
-				}
-				uint64_t value = **((uint64_t **)info_ptr);
-				*info_ptr += sizeof(uint64_t);
+				uint64_t value = 0;
 
+				if (*(uintptr_t *)info_ptr + sizeof(value) > info_ptr_end) {
+					debug_code(ERROR_OUT_OF_BOUNDS);
+					return ERROR_OUT_OF_BOUNDS;
+				}
+
+				value = **((uint64_t **)info_ptr);
 				die_output->attributes[i].value = value;
+
+				*info_ptr += sizeof(value);
 				break;
 			}
 
@@ -435,13 +473,17 @@ static err_code _next_die(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 			// Ln: 6
 			//
 			case DW_FORM_sec_offset: {
-				if (*(uintptr_t *)info_ptr + sizeof(uint32_t) >= info_ptr_end) {
-					return DW_ERROR_FAILED_BOUND_CHECK;
-				}
-				uint32_t offset = *(uint32_t *)info_ptr;
-				*info_ptr += sizeof(uint32_t);
+				uint32_t offset = 0;
 
+				if (*(uintptr_t *)info_ptr + sizeof(offset) > info_ptr_end) {
+					debug_code(ERROR_OUT_OF_BOUNDS);
+					return ERROR_OUT_OF_BOUNDS;
+				}
+
+				offset = *(uint32_t *)info_ptr;
 				die_output->attributes[i].value = (uint64_t)offset;
+
+				*info_ptr += sizeof(offset);
 				break;
 			}
 
@@ -450,13 +492,17 @@ static err_code _next_die(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 			//
 			case DW_FORM_addr: {
 				// Note: uint64_t is an assumption!
-				if (*(uintptr_t *)info_ptr + sizeof(uint64_t) >= info_ptr_end) {
-					return DW_ERROR_FAILED_BOUND_CHECK;
-				}
-				uintptr_t address = **(uint64_t **)info_ptr;
-				*info_ptr += sizeof(uint64_t);
+				uint64_t address = 0;
 
+				if (*(uintptr_t *)info_ptr + sizeof(address) > info_ptr_end) {
+					debug_code(ERROR_OUT_OF_BOUNDS);
+					return ERROR_OUT_OF_BOUNDS;
+				}
+
+				address = **(uint64_t **)info_ptr;
 				die_output->attributes[i].value = address;
+
+				*info_ptr += sizeof(address);
 				break;
 			}
 
@@ -464,13 +510,17 @@ static err_code _next_die(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 			// Reference class form. Specification Pg: 217 Ln: 1
 			//
 			case DW_FORM_ref4: {
-				if (*(uintptr_t *)info_ptr + sizeof(uint32_t) >= info_ptr_end) {
-					return DW_ERROR_FAILED_BOUND_CHECK;
-				}
-				uint32_t reference = *(uint32_t *)info_ptr;
-				*info_ptr += sizeof(uint32_t);
+				uint32_t reference = 0;
 
+				if (*(uintptr_t *)info_ptr + sizeof(reference) > info_ptr_end) {
+					debug_code(ERROR_OUT_OF_BOUNDS);
+					return ERROR_OUT_OF_BOUNDS;
+				}
+
+				reference = *(uint32_t *)info_ptr;
 				die_output->attributes[i].value = (uint64_t)reference;
+
+				*info_ptr += sizeof(reference);
 				break;
 			}
 
@@ -486,21 +536,23 @@ static err_code _next_die(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 			// exprloc class form. Specification Pg: 214 Ln: 28
 			//
 			case DW_FORM_exprloc: {
-				uint64_t data_size = DECODE_ULEB128(info_ptr, uint64_t);
-				if (*(uintptr_t *)info_ptr + data_size >= info_ptr_end) {
-					return DW_ERROR_FAILED_BOUND_CHECK;
+				uint64_t data_size = 0;
+
+				if ((err = leb128_to_u64(info_ptr, info_ptr_end, &data_size))) {
+					debug_code(err);
+					return err;
 				}
 
-				*info_ptr += data_size;
-
 				die_output->attributes[i].value = data_size;
+
+				*info_ptr += data_size;
 				break;
 			};
 
 			default:
 				printf(KERROR "Tag: %x\n", tag_code);
-				printf(KERROR "Attribute: %x\n", attribute_name_code);
-				printf(KERROR "Form: %x\n", attribute_form_code);
+				printf(KERROR "Attribute: %x\n", attribute);
+				printf(KERROR "Form: %x\n", form);
 				abort("Unknown DWARF attribute form!\n");
 			}
 		}
@@ -523,25 +575,20 @@ err_code dwarf_cu_query_func(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 	*symbol_string = NULL;
 
 	if (cu->version != 5) {
+		debug_code(DW_ERROR_UNSUPPORTED_VERSION);
 		return DW_ERROR_UNSUPPORTED_VERSION;
 	}
 
 	if (cu->unit_type != DW_UT_compile) {
+		debug_code(DW_ERROR_UNSUPPORTED_HEADER);
 		return DW_ERROR_UNSUPPORTED_HEADER;
 	}
-
-	printf("Compilation Unit @ offset %#lx\n",
-		   (uintptr_t)cu - (uintptr_t)ctx->debug_info);
-	printf(" Length: %#x\n", cu->length);
-	printf(" Version: %d\n", cu->version);
-	printf(" Unit Type: %d\n", cu->unit_type);
-	printf(" Abbrev Offset: %#x\n", cu->debug_abbrev_offset);
-	printf(" Pointer Size: %d\n", cu->address_size);
 
 	void *info_ptr = (void *)cu + sizeof(DW_Chdr);
 	uintptr_t info_ptr_end = (uintptr_t)cu + cu->length + 4;
 	if (info_ptr_end > (uintptr_t)ctx->debug_info + ctx->debug_info_size) {
-		return DW_ERROR_FAILED_BOUND_CHECK;
+		debug_code(ERROR_OUT_OF_BOUNDS);
+		return ERROR_OUT_OF_BOUNDS;
 	}
 
 	do {
@@ -572,9 +619,8 @@ err_code dwarf_cu_query_func(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 			if (name == NULL) {
 				continue;
 			}
-			if (name->attribute_form_code == DW_FORM_strp) {
+			if (name->form_code == DW_FORM_strp) {
 				*symbol_string = DEBUG_STR(ctx, name->value);
-
 			} else {
 				*symbol_string = DEBUG_LINE_STR(ctx, name->value);
 			}

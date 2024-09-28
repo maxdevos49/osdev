@@ -4,12 +4,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define DECODE_ULEB128(stream, intType)                                        \
-	((intType)decode_uleb128((uint8_t **)stream))
-#define DECODE_SLEB128(stream, intType)                                        \
-	((intType)decode_sleb128((uint8_t **)stream, sizeof(intType) * 8))
+err_code leb128_to_u8(void **stream, uintptr_t stream_end, uint8_t *output);
+err_code leb128_to_u16(void **stream, uintptr_t stream_end, uint16_t *output);
+err_code leb128_to_u32(void **stream, uintptr_t stream_end, uint32_t *output);
+err_code leb128_to_u64(void **stream, uintptr_t stream_end, uint64_t *output);
 
-uint64_t decode_uleb128(uint8_t **stream);
-int64_t decode_sleb128(uint8_t **stream, size_t bit_size);
+err_code leb128_to_s8(void **stream, uintptr_t stream_end, int8_t *output);
+err_code leb128_to_s16(void **stream, uintptr_t stream_end, int16_t *output);
+err_code leb128_to_s32(void **stream, uintptr_t stream_end, int32_t *output);
+err_code leb128_to_s64(void **stream, uintptr_t stream_end, int64_t *output);
 
 #endif

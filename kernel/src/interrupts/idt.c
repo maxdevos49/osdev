@@ -1,38 +1,34 @@
-#include <stdint.h>
 #include "idt.h"
-#include "macro.h"
-#include "instruction.h"
 #include "error.h"
-#include "string/utility.h"
+#include "instruction.h"
+#include "macro.h"
 #include "memory/stack.h"
+#include "string/utility.h"
+#include <stdint.h>
 
-struct IDT_REGISTER
-{
+struct IDT_REGISTER {
 	uint16_t limit;
 	uint64_t base;
 } ATTR_PACK;
 
 // Long mode Interrupt-Gate/Trap Gate Descriptor
 // AMD64 Programmer’s Manual, Volume 2: PG 102
-struct INTERRUPT_GATE_DESCRIPTOR
-{
+struct INTERRUPT_GATE_DESCRIPTOR {
 	uint16_t target_offset_low;
 	uint16_t target_selector;
-	uint8_t
-		ist : 3,
-		reserved_0 : 5;
+	uint8_t ist : 3, reserved_0 : 5;
 	uint8_t flags;
 	uint16_t target_offset_mid;
 	uint32_t target_offset_high;
 	uint32_t reserved_1;
 } ATTR_PACK;
-_Static_assert(sizeof(struct INTERRUPT_GATE_DESCRIPTOR) == sizeof(uint64_t) * 2);
+_Static_assert(sizeof(struct INTERRUPT_GATE_DESCRIPTOR) ==
+			   sizeof(uint64_t) * 2);
 
 static struct INTERRUPT_GATE_DESCRIPTOR _idt[256] = {0};
 
 // AMD64 Architecture programmers manual volume 2: Pg 284
-struct INTERRUPT_STACK
-{
+struct INTERRUPT_STACK {
 	// Placed by the stub.
 	uint64_t dr7;
 	uint64_t dr6;
@@ -139,14 +135,14 @@ void init_idt(void)
 
 void load_idt(void)
 {
-	struct IDT_REGISTER idtr = {
-		.limit = sizeof(_idt),
-		.base = (uintptr_t)&_idt};
+	struct IDT_REGISTER idtr = {.limit = sizeof(_idt),
+								.base = (uintptr_t)&_idt};
 
 	asm volatile("lidt %0" ::"m"(idtr));
 }
 
-void set_interrupt_gate(uint16_t index, uintptr_t target, uint16_t target_selector, uint16_t flags)
+void set_interrupt_gate(uint16_t index, uintptr_t target,
+						uint16_t target_selector, uint16_t flags)
 {
 	_idt[index].target_offset_low = target & 0xffff;
 	_idt[index].target_selector = target_selector;
@@ -193,26 +189,30 @@ const char *exception_messages[] = {
 
 void isr_exception_handler(struct INTERRUPT_STACK *stack)
 {
-	printf(KPANIC "%s Exception (%#lx)", exception_messages[stack->vector], stack->vector);
+	printf(KPANIC "%s Exception (%#lx)", exception_messages[stack->vector],
+		   stack->vector);
 
-	if (stack->error_code != 0)
-	{
+	if (stack->error_code != 0) {
 		printf(" | Error Code: %#018lx\n", stack->error_code);
-	}
-	else
-	{
+	} else {
 		printf("\n");
 	}
 
-	strace(10);
+	strace(10, (void *)stack->rbp, (void*)stack->return_rip);
 
-	printf("RAX=%016lx  RBX=%016lx  RCX=%016lx  RDX=%016lx\n", stack->rax, stack->rbx, stack->rcx, stack->rdx);
-	printf("RSI=%016lx  RDI=%016lx  RBP=%016lx  RSP=%016lx\n", stack->rsi, stack->rdi, stack->rbp, stack->return_rsp);
-	printf("R8 =%016lx  R9 =%016lx  R10=%016lx  R11=%016lx\n", stack->r8, stack->r9, stack->r10, stack->r11);
-	printf("R12=%016lx  R13=%016lx  R14=%016lx  R15=%016lx\n", stack->r12, stack->r13, stack->r14, stack->r15);
+	printf("RAX=%016lx  RBX=%016lx  RCX=%016lx  RDX=%016lx\n", stack->rax,
+		   stack->rbx, stack->rcx, stack->rdx);
+	printf("RSI=%016lx  RDI=%016lx  RBP=%016lx  RSP=%016lx\n", stack->rsi,
+		   stack->rdi, stack->rbp, stack->return_rsp);
+	printf("R8 =%016lx  R9 =%016lx  R10=%016lx  R11=%016lx\n", stack->r8,
+		   stack->r9, stack->r10, stack->r11);
+	printf("R12=%016lx  R13=%016lx  R14=%016lx  R15=%016lx\n", stack->r12,
+		   stack->r13, stack->r14, stack->r15);
 	printf("RIP=%016lx  RFL=%016lx\n", stack->return_rip, stack->return_rflags);
-	printf("CR0=%016lx  CR2=%016lx  CR3=%016lx  CR4=%016lx\n", stack->cr0, stack->cr2, stack->cr3, stack->cr4);
-	printf("DR0=%016lx  DR1=%016lx  DR2=%016lx  DR3=%016lx\n", stack->dr0, stack->dr1, stack->dr2, stack->dr3);
+	printf("CR0=%016lx  CR2=%016lx  CR3=%016lx  CR4=%016lx\n", stack->cr0,
+		   stack->cr2, stack->cr3, stack->cr4);
+	printf("DR0=%016lx  DR1=%016lx  DR2=%016lx  DR3=%016lx\n", stack->dr0,
+		   stack->dr1, stack->dr2, stack->dr3);
 	printf("DR6=%016lx  DR7=%016lx\n", stack->dr6, stack->dr7);
 
 	abort("System will now halt\n");

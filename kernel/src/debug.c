@@ -1,4 +1,6 @@
+#include "macro.h"
 #include "string/utility.h"
+#include "type.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -33,4 +35,14 @@ void debug_hex_table(void *address, size_t length)
 	}
 
 	printf("\n");
+}
+
+const char *debug_code_str(err_code code)
+{
+	switch (code) {
+	case ERROR_OUT_OF_BOUNDS:
+		return STRINGIFY(ERROR_OUT_OF_BOUNDS);
+	}
+
+	return NULL;
 }
