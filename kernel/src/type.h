@@ -15,6 +15,8 @@ enum ERROR_CODE {
 	NO_ERROR = 0x00,
 	/* Array or pointer index out of bounds */
 	ERROR_OUT_OF_BOUNDS = 0x01,
+	ERROR_UNEXPECTED_NULL_POINTER = 0x02,
+	ERROR_DEPENDENCY_NOT_LOADED = 0x03,
 };
 
 #endif

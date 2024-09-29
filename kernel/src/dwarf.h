@@ -18,10 +18,10 @@
 enum DW_ERROR_CODE {
 
 	DW_ERROR_UNSUPPORTED_VERSION = 0xff, /* DWARF version is unsupported */
-	DW_ERROR_UNSUPPORTED_HEADER,	  /* DWARF header state or structure is
-										 unsupported. */
-	DW_ERROR_INVALID_HEADER,		  /* DWARF header is invalid or malformed */
-	DW_ERROR_INVALID_UNIT,			  /* DWARF data is invalid or malformed */
+	DW_ERROR_UNSUPPORTED_HEADER,		 /* DWARF header state or structure is
+											unsupported. */
+	DW_ERROR_INVALID_HEADER, /* DWARF header is invalid or malformed */
+	DW_ERROR_INVALID_UNIT,	 /* DWARF data is invalid or malformed */
 };
 
 // Header representing data in ".debug_aranges" section. Specification Pg: 235
@@ -45,28 +45,31 @@ typedef struct DWARF_COMPILATION_HEADER {
 	uint32_t debug_abbrev_offset; /* A offset into the .debug_abbrev section */
 } ATTR_PACK DW_Chdr;
 
-// Header representing data in .debug_line section Specification Pg: // TODO
-// typedef struct DWARF_LINE_HEADER {
-// 	uint32_t unit_length;	/* The unit length*/
-// 	uint16_t version;		/* DWARF version number */
-// 	uint32_t header_length; /* Length of this header to the first byte of the
-// 							   line program */
-// 	uint8_t minimum_instruction_length; /* Size in bytes of the smallest target
-// 										   machine instruction. */
-// 	uint8_t maximum_operations_per_instruction; /* Maximum number of individual
-// 												   operations that may be
-// 												   encoded in an instruction. */
-// 	uint8_t default_is_stmt;
-// 	int8_t line_base;
-// 	uint8_t line_range;
-// 	uint8_t opcode_base;
-// 	uint8_t standard_opcode_lengths[12];
-// } ATTR_PACK DW_Lhdr;
+// Header representing data in .debug_line section Specification Pg: 153 Ln: 12
+typedef struct DWARF_LINE_HEADER {
+	uint32_t unit_length;
+	uint16_t version;
+	uint8_t address_size;
+	uint8_t segment_selector_size;
+	// The number of bytes remaining after this field until the beginning of the
+	// line number program itself.
+	uint32_t header_length;
+	uint8_t minimum_instruction_length; /* Size in bytes of the smallest target
+										   machine instruction. */
+	uint8_t maximum_operations_per_instruction; /* Maximum number of individual
+												   operations that may be
+												   encoded in an instruction. */
+	uint8_t default_is_stmt;
+	int8_t line_base;
+	uint8_t line_range;
+	uint8_t opcode_base;
+	uint8_t standard_opcode_lengths[12];
+} ATTR_PACK DW_Lhdr;
 
 enum DW_UT {
 	// Pg: 199
 	DW_UT_compile = 0x01,
-	// ... others unused
+	// ... others currently unused
 };
 
 enum DW_TAG {
@@ -459,17 +462,12 @@ enum DW_OP {
 	DW_OP_hi_user = 0xff,
 };
 
-typedef struct DWARF_CONTEXT DW_Ctx;
+err_code dwarf_load_sections(const Elf64_Ehdr *restrict elf_header);
 
-DW_Ctx *dwarf_init_context(const Elf64_Ehdr *restrict elf_header);
+err_code dwarf_cu_for_address(const uintptr_t instruction_address,
+							  DW_Chdr **cu_output);
 
-err_code dwarf_cu_for_address(const DW_Ctx *restrict ctx,
-							  const uintptr_t instruction_address,
-							  DW_Chdr **compilation_unit_header);
-
-err_code dwarf_cu_query_func(const DW_Ctx *restrict ctx,
-							 const DW_Chdr *compilation_unit,
-							 const uintptr_t instruction_address,
-							 char **symbol_string);
+err_code dwarf_query_func(const uintptr_t instruction_address,
+						  char **symbol_string);
 
 #endif

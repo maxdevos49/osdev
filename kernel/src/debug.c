@@ -42,6 +42,10 @@ const char *debug_code_str(err_code code)
 	switch (code) {
 	case ERROR_OUT_OF_BOUNDS:
 		return STRINGIFY(ERROR_OUT_OF_BOUNDS);
+	case ERROR_UNEXPECTED_NULL_POINTER:
+		return STRINGIFY(ERROR_UNEXPECTED_NULL_POINTER);
+	case ERROR_DEPENDENCY_NOT_LOADED:
+		return STRINGIFY(ERROR_DEPENDENCY_NOT_LOADED);
 	}
 
 	return NULL;

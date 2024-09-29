@@ -3,12 +3,16 @@
 #include "elf.h"
 #include "error.h"
 #include "memory/heap.h"
+#include "stdbool.h"
+#include "stream.h"
 #include "string/utility.h"
 
-#define DEBUG_STR(ctx, offset) ((char *)(ctx->debug_str + offset))
-#define DEBUG_LINE_STR(ctx, offset) ((char *)(ctx->debug_line_str + offset))
+#define DEBUG_STR(offset) ((char *)(_ctx.debug_str + offset))
+#define DEBUG_LINE_STR(offset) ((char *)(_ctx.debug_line_str + offset))
 
 struct DWARF_CONTEXT {
+	bool loaded;
+
 	void *debug_info;
 	size_t debug_info_size;
 	void *debug_abbrev;
@@ -27,19 +31,20 @@ struct DIE_ATTRIBUTE {
 	uint16_t name_code;
 	uint16_t form_code;
 	// Value should be interpreted based on the form_code value. This might be a
-	// pointer or a simple integer value.
+	// pointer or a simple integer value. Not all values can be represented by
+	// this... dwarf expressions. We dont need that yet though.
 	uint64_t value;
 };
 
 struct DIE {
 	uint16_t abbreviation_code;
 	uint16_t tag_code;
-
 	uint8_t has_children;
-
 	uint8_t attribute_count;
 	struct DIE_ATTRIBUTE attributes[15];
 };
+
+struct DWARF_CONTEXT _ctx = {0};
 
 static inline struct DIE_ATTRIBUTE *_die_attribute(struct DIE *die,
 												   enum DW_AT attribute_code)
@@ -61,7 +66,7 @@ static err_code _abbrev_table_entry(const uint32_t target_abbrev_code,
 									void **abbrev_ptr,
 									uintptr_t *abbrev_ptr_end)
 {
-	err_code err;
+	err_code err = 0;
 
 	do {
 		void *abbrev_start = *abbrev_ptr;
@@ -83,11 +88,11 @@ static err_code _abbrev_table_entry(const uint32_t target_abbrev_code,
 		}
 
 		// Read past has_children byte.
-		if ((uintptr_t)*abbrev_ptr + sizeof(uint8_t) >= *abbrev_ptr_end) {
-			debug_code(ERROR_OUT_OF_BOUNDS);
-			return ERROR_OUT_OF_BOUNDS;
+		uint8_t has_children = 0;
+		if ((err = read_u8(abbrev_ptr, *abbrev_ptr_end, &has_children))) {
+			debug_code(err);
+			return err;
 		}
-		*abbrev_ptr += sizeof(uint8_t);
 
 		// Find the end of the attributes
 		do {
@@ -137,84 +142,98 @@ static err_code _abbrev_table_entry(const uint32_t target_abbrev_code,
 	return 0;
 }
 
-// Creates a DWARF context struct for use with dwarf utility function.
-DW_Ctx *dwarf_init_context(const Elf64_Ehdr *restrict elf_header)
+err_code dwarf_load_sections(const Elf64_Ehdr *restrict elf_header)
 {
+	if (_ctx.loaded) {
+		return 0;
+	}
+
+	if (elf_header == NULL) {
+		debug_code(ERROR_UNEXPECTED_NULL_POINTER);
+		return ERROR_UNEXPECTED_NULL_POINTER;
+	}
+
 	ELF64_Shdr *debug_info_hdr =
 		elf64_section_header_by_name(elf_header, ".debug_info");
 	if (debug_info_hdr == NULL) {
-		return NULL; /* Failed to find ".debug_info" section */
+		debug_code(ERROR_UNEXPECTED_NULL_POINTER);
+		return ERROR_UNEXPECTED_NULL_POINTER;
 	}
 
 	ELF64_Shdr *debug_abbrev_hdr =
 		elf64_section_header_by_name(elf_header, ".debug_abbrev");
 	if (debug_abbrev_hdr == NULL) {
-		return NULL; /* Failed to find ".debug_abbrev" section */
+		debug_code(ERROR_UNEXPECTED_NULL_POINTER);
+		return ERROR_UNEXPECTED_NULL_POINTER;
 	}
 
 	ELF64_Shdr *debug_aranges_hdr =
 		elf64_section_header_by_name(elf_header, ".debug_aranges");
 	if (debug_aranges_hdr == NULL) {
-		return NULL; /* Failed to find ".debug_aranges" section */
+		debug_code(ERROR_UNEXPECTED_NULL_POINTER);
+		return ERROR_UNEXPECTED_NULL_POINTER;
 	}
 
 	ELF64_Shdr *debug_line_hdr =
 		elf64_section_header_by_name(elf_header, ".debug_line");
 	if (debug_line_hdr == NULL) {
-		return NULL; /* Failed to find ".debug_line" section */
+		debug_code(ERROR_UNEXPECTED_NULL_POINTER);
+		return ERROR_UNEXPECTED_NULL_POINTER;
 	}
 
 	ELF64_Shdr *debug_line_str_hdr =
 		elf64_section_header_by_name(elf_header, ".debug_line_str");
 	if (debug_line_str_hdr == NULL) {
-		return NULL; /* Failed to find ".debug_line_str" section */
+		debug_code(ERROR_UNEXPECTED_NULL_POINTER);
+		return ERROR_UNEXPECTED_NULL_POINTER;
 	}
 
 	ELF64_Shdr *debug_str_hdr =
 		elf64_section_header_by_name(elf_header, ".debug_str");
 	if (debug_str_hdr == NULL) {
-		return NULL; /* Failed to find ".debug_str" section */
+		debug_code(ERROR_UNEXPECTED_NULL_POINTER);
+		return ERROR_UNEXPECTED_NULL_POINTER;
 	}
 
-	struct DWARF_CONTEXT *ctx =
-		(struct DWARF_CONTEXT *)kmalloc(sizeof(struct DWARF_CONTEXT));
-	if (ctx == NULL) {
-		abort("Failed to allocate memory for DWARF context.");
-	}
+	_ctx.debug_info = ELF64_SECTION(elf_header, debug_info_hdr);
+	_ctx.debug_info_size = debug_info_hdr->sh_size;
 
-	ctx->debug_info = ELF64_SECTION(elf_header, debug_info_hdr);
-	ctx->debug_info_size = debug_info_hdr->sh_size;
+	_ctx.debug_abbrev = ELF64_SECTION(elf_header, debug_abbrev_hdr);
+	_ctx.debug_abbrev_size = debug_abbrev_hdr->sh_size;
 
-	ctx->debug_abbrev = ELF64_SECTION(elf_header, debug_abbrev_hdr);
-	ctx->debug_abbrev_size = debug_abbrev_hdr->sh_size;
+	_ctx.debug_aranges = ELF64_SECTION(elf_header, debug_aranges_hdr);
+	_ctx.debug_aranges_size = debug_aranges_hdr->sh_size;
 
-	ctx->debug_aranges = ELF64_SECTION(elf_header, debug_aranges_hdr);
-	ctx->debug_aranges_size = debug_aranges_hdr->sh_size;
+	_ctx.debug_line = ELF64_SECTION(elf_header, debug_line_hdr);
+	_ctx.debug_line_size = debug_line_hdr->sh_size;
 
-	ctx->debug_line = ELF64_SECTION(elf_header, debug_line_hdr);
-	ctx->debug_line_size = debug_line_hdr->sh_size;
+	_ctx.debug_line_str = ELF64_SECTION(elf_header, debug_line_str_hdr);
+	_ctx.debug_line_str_size = debug_line_str_hdr->sh_size;
 
-	ctx->debug_line_str = ELF64_SECTION(elf_header, debug_line_str_hdr);
-	ctx->debug_line_str_size = debug_line_str_hdr->sh_size;
+	_ctx.debug_str = ELF64_SECTION(elf_header, debug_str_hdr);
+	_ctx.debug_str_size = debug_str_hdr->sh_size;
 
-	ctx->debug_str = ELF64_SECTION(elf_header, debug_str_hdr);
-	ctx->debug_str_size = debug_str_hdr->sh_size;
+	_ctx.loaded = true;
 
-	return ctx;
+	return 0;
 }
 
 // Gets the compilation unit header for a given instruction address. Returns an
 // error code if an error or unsupported case is encountered. If no compilation
 // unit is found the 'compilation_unit_header' ouput remains null.
-err_code dwarf_cu_for_address(const DW_Ctx *restrict ctx,
-							  const uintptr_t instruction_address,
+err_code dwarf_cu_for_address(const uintptr_t instruction_address,
 							  DW_Chdr **compilation_unit_header)
 {
 	*compilation_unit_header = NULL;
 
+	if (_ctx.loaded == false) {
+		debug_code(ERROR_DEPENDENCY_NOT_LOADED);
+		return ERROR_DEPENDENCY_NOT_LOADED;
+	}
+
 	uintptr_t aranges_section_end =
-		(uintptr_t)ctx->debug_aranges + ctx->debug_aranges_size;
-	DW_ARhdr *arange = ctx->debug_aranges;
+		(uintptr_t)_ctx.debug_aranges + _ctx.debug_aranges_size;
+	DW_ARhdr *arange = _ctx.debug_aranges;
 
 	do {
 		if (arange->version != 2)
@@ -262,7 +281,7 @@ err_code dwarf_cu_for_address(const DW_Ctx *restrict ctx,
 			if (instruction_address >= address &&
 				instruction_address < address + length) {
 				*compilation_unit_header =
-					(DW_Chdr *)(ctx->debug_info + arange->debug_info_offset);
+					(DW_Chdr *)(_ctx.debug_info + arange->debug_info_offset);
 
 				return 0;
 			}
@@ -277,9 +296,8 @@ err_code dwarf_cu_for_address(const DW_Ctx *restrict ctx,
 }
 
 // Gets the next Debug information entry(DIE)
-static err_code _next_die(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
-						  void **info_ptr, const uintptr_t info_ptr_end,
-						  struct DIE *die_output)
+static err_code _next_die(const DW_Chdr *cu, void **info_ptr,
+						  const uintptr_t info_ptr_end, struct DIE *die_output)
 {
 	err_code err = 0;
 
@@ -295,9 +313,9 @@ static err_code _next_die(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 	if (target_abbrev_code == 0)
 		return 0;
 
-	void *abbrev_ptr = ctx->debug_abbrev + cu->debug_abbrev_offset;
+	void *abbrev_ptr = _ctx.debug_abbrev + cu->debug_abbrev_offset;
 	uintptr_t abbrev_ptr_end =
-		(uintptr_t)ctx->debug_abbrev + ctx->debug_abbrev_size;
+		(uintptr_t)_ctx.debug_abbrev + _ctx.debug_abbrev_size;
 
 	if ((err = _abbrev_table_entry(target_abbrev_code, &abbrev_ptr,
 								   &abbrev_ptr_end))) {
@@ -328,13 +346,11 @@ static err_code _next_die(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 
 	die_output->tag_code = tag_code;
 
-	uint8_t has_children = *(uint8_t *)abbrev_ptr;
-
-	if (*(uintptr_t *)abbrev_ptr + sizeof(uint8_t) >= abbrev_ptr_end) {
-		debug_code(ERROR_OUT_OF_BOUNDS);
-		return ERROR_OUT_OF_BOUNDS;
+	uint8_t has_children = 0;
+	if ((err = read_u8(&abbrev_ptr, abbrev_ptr_end, &has_children))) {
+		debug_code(err);
+		return err;
 	}
-	abbrev_ptr += sizeof(uint8_t);
 
 	die_output->has_children = has_children;
 
@@ -379,17 +395,12 @@ static err_code _next_die(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 			case DW_FORM_line_strp:
 			case DW_FORM_strp: {
 				uint32_t str_offset = 0;
-
-				if (*(uintptr_t *)info_ptr + sizeof(str_offset) >
-					info_ptr_end) {
-					debug_code(ERROR_OUT_OF_BOUNDS);
-					return ERROR_OUT_OF_BOUNDS;
+				if ((err = read_u32(info_ptr, info_ptr_end, &str_offset))) {
+					debug_code(err);
+					return err;
 				}
 
-				str_offset = **(uint32_t **)info_ptr;
 				die_output->attributes[i].value = (uint64_t)str_offset;
-
-				*info_ptr += sizeof(str_offset);
 				break;
 			}
 			case DW_FORM_string: {
@@ -412,59 +423,43 @@ static err_code _next_die(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 			// Constant class form. Specification Pg: 214 Ln: 8
 			//
 			case DW_FORM_data1: {
-				uint8_t value = 0;
-
-				if (*(uintptr_t *)info_ptr + sizeof(value) > info_ptr_end) {
-					debug_code(ERROR_OUT_OF_BOUNDS);
-					return ERROR_OUT_OF_BOUNDS;
+				uint8_t data1 = 0;
+				if ((err = read_u8(info_ptr, info_ptr_end, &data1))) {
+					debug_code(err);
+					return err;
 				}
 
-				value = **((uint8_t **)info_ptr);
-				die_output->attributes[i].value = (uint64_t)value;
-
-				*info_ptr += sizeof(value);
+				die_output->attributes[i].value = (uint64_t)data1;
 				break;
 			}
 			case DW_FORM_data2: {
-				uint16_t value = 0;
-
-				if (*(uintptr_t *)info_ptr + sizeof(value) > info_ptr_end) {
-					debug_code(ERROR_OUT_OF_BOUNDS);
-					return ERROR_OUT_OF_BOUNDS;
+				uint16_t data2 = 0;
+				if ((err = read_u16(info_ptr, info_ptr_end, &data2))) {
+					debug_code(err);
+					return err;
 				}
 
-				value = **((uint16_t **)info_ptr);
-				die_output->attributes[i].value = (uint64_t)value;
-
-				*info_ptr += sizeof(value);
+				die_output->attributes[i].value = (uint64_t)data2;
 				break;
 			}
 			case DW_FORM_data4: {
-				uint32_t value = 0;
-
-				if (*(uintptr_t *)info_ptr + sizeof(value) > info_ptr_end) {
-					debug_code(ERROR_OUT_OF_BOUNDS);
-					return ERROR_OUT_OF_BOUNDS;
+				uint32_t data4 = 0;
+				if ((err = read_u32(info_ptr, info_ptr_end, &data4))) {
+					debug_code(err);
+					return err;
 				}
 
-				value = **((uint32_t **)info_ptr);
-				die_output->attributes[i].value = (uint64_t)value;
-
-				*info_ptr += sizeof(value);
+				die_output->attributes[i].value = (uint64_t)data4;
 				break;
 			}
 			case DW_FORM_data8: {
-				uint64_t value = 0;
-
-				if (*(uintptr_t *)info_ptr + sizeof(value) > info_ptr_end) {
-					debug_code(ERROR_OUT_OF_BOUNDS);
-					return ERROR_OUT_OF_BOUNDS;
+				uint64_t data8 = 0;
+				if ((err = read_u64(info_ptr, info_ptr_end, &data8))) {
+					debug_code(err);
+					return err;
 				}
 
-				value = **((uint64_t **)info_ptr);
-				die_output->attributes[i].value = value;
-
-				*info_ptr += sizeof(value);
+				die_output->attributes[i].value = data8;
 				break;
 			}
 
@@ -474,16 +469,12 @@ static err_code _next_die(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 			//
 			case DW_FORM_sec_offset: {
 				uint32_t offset = 0;
-
-				if (*(uintptr_t *)info_ptr + sizeof(offset) > info_ptr_end) {
-					debug_code(ERROR_OUT_OF_BOUNDS);
-					return ERROR_OUT_OF_BOUNDS;
+				if ((err = read_u32(info_ptr, info_ptr_end, &offset))) {
+					debug_code(err);
+					return err;
 				}
 
-				offset = *(uint32_t *)info_ptr;
 				die_output->attributes[i].value = (uint64_t)offset;
-
-				*info_ptr += sizeof(offset);
 				break;
 			}
 
@@ -493,16 +484,12 @@ static err_code _next_die(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 			case DW_FORM_addr: {
 				// Note: uint64_t is an assumption!
 				uint64_t address = 0;
-
-				if (*(uintptr_t *)info_ptr + sizeof(address) > info_ptr_end) {
-					debug_code(ERROR_OUT_OF_BOUNDS);
-					return ERROR_OUT_OF_BOUNDS;
+				if ((err = read_u64(info_ptr, info_ptr_end, &address))) {
+					debug_code(err);
+					return err;
 				}
 
-				address = **(uint64_t **)info_ptr;
 				die_output->attributes[i].value = address;
-
-				*info_ptr += sizeof(address);
 				break;
 			}
 
@@ -510,17 +497,13 @@ static err_code _next_die(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 			// Reference class form. Specification Pg: 217 Ln: 1
 			//
 			case DW_FORM_ref4: {
-				uint32_t reference = 0;
-
-				if (*(uintptr_t *)info_ptr + sizeof(reference) > info_ptr_end) {
-					debug_code(ERROR_OUT_OF_BOUNDS);
-					return ERROR_OUT_OF_BOUNDS;
+				uint32_t ref4 = 0;
+				if ((err = read_u32(info_ptr, info_ptr_end, &ref4))) {
+					debug_code(err);
+					return err;
 				}
 
-				reference = *(uint32_t *)info_ptr;
-				die_output->attributes[i].value = (uint64_t)reference;
-
-				*info_ptr += sizeof(reference);
+				die_output->attributes[i].value = (uint64_t)ref4;
 				break;
 			}
 
@@ -537,15 +520,15 @@ static err_code _next_die(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 			//
 			case DW_FORM_exprloc: {
 				uint64_t data_size = 0;
-
 				if ((err = leb128_to_u64(info_ptr, info_ptr_end, &data_size))) {
 					debug_code(err);
 					return err;
 				}
 
-				die_output->attributes[i].value = data_size;
-
+				// "Consume the data"
 				*info_ptr += data_size;
+
+				die_output->attributes[i].value = data_size;
 				break;
 			};
 
@@ -568,11 +551,28 @@ static err_code _next_die(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 // an error code if an error or unsupported case is encountered. If no
 // function or function name is found then the `symbol_string` ouput remains
 // null.
-err_code dwarf_cu_query_func(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
-							 const uintptr_t instruction_address,
-							 char **symbol_string)
+err_code dwarf_query_func(const uintptr_t instruction_address,
+						  char **symbol_string)
 {
+	err_code error = 0;
+
 	*symbol_string = NULL;
+
+	if (_ctx.loaded == false) {
+		debug_code(ERROR_DEPENDENCY_NOT_LOADED);
+		return ERROR_DEPENDENCY_NOT_LOADED;
+	}
+
+	DW_Chdr *cu = NULL;
+	if ((error = dwarf_cu_for_address((uintptr_t)instruction_address, &cu))) {
+		debug_code(error);
+		return error;
+	}
+
+	if (cu == NULL) {
+		// Address was not inside a function. This is not considered an error.
+		return 0;
+	}
 
 	if (cu->version != 5) {
 		debug_code(DW_ERROR_UNSUPPORTED_VERSION);
@@ -586,7 +586,7 @@ err_code dwarf_cu_query_func(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 
 	void *info_ptr = (void *)cu + sizeof(DW_Chdr);
 	uintptr_t info_ptr_end = (uintptr_t)cu + cu->length + 4;
-	if (info_ptr_end > (uintptr_t)ctx->debug_info + ctx->debug_info_size) {
+	if (info_ptr_end > (uintptr_t)_ctx.debug_info + _ctx.debug_info_size) {
 		debug_code(ERROR_OUT_OF_BOUNDS);
 		return ERROR_OUT_OF_BOUNDS;
 	}
@@ -594,7 +594,7 @@ err_code dwarf_cu_query_func(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 	do {
 		struct DIE die = {0};
 
-		err_code error = _next_die(ctx, cu, &info_ptr, info_ptr_end, &die);
+		error = _next_die(cu, &info_ptr, info_ptr_end, &die);
 		if (error) {
 			return error;
 		}
@@ -604,7 +604,7 @@ err_code dwarf_cu_query_func(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 		}
 
 		struct DIE_ATTRIBUTE *low_pc = _die_attribute(&die, DW_AT_low_pc);
-		if (low_pc == NULL) { // TODO check expected form?
+		if (low_pc == NULL) {
 			continue;
 		}
 
@@ -620,9 +620,9 @@ err_code dwarf_cu_query_func(const DW_Ctx *restrict ctx, const DW_Chdr *cu,
 				continue;
 			}
 			if (name->form_code == DW_FORM_strp) {
-				*symbol_string = DEBUG_STR(ctx, name->value);
+				*symbol_string = DEBUG_STR(name->value);
 			} else {
-				*symbol_string = DEBUG_LINE_STR(ctx, name->value);
+				*symbol_string = DEBUG_LINE_STR(name->value);
 			}
 			break;
 		}

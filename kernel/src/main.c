@@ -22,6 +22,9 @@
 
 ATTR_REQUEST static volatile LIMINE_BASE_REVISION(2);
 
+ATTR_REQUEST volatile struct limine_kernel_file_request kernel_file_request = {
+	.id = LIMINE_KERNEL_FILE_REQUEST, .revision = 0};
+
 NO_RETURN static void hcf()
 {
 	for (;;) {
@@ -39,12 +42,31 @@ NO_RETURN void abort(const char *error)
 
 void kmain(void)
 {
-	init_serial();
+	err_code err = 0;
 
 	// Ensure the bootloader actually understands our base revision (see spec).
 	if (LIMINE_BASE_REVISION_SUPPORTED == false) {
 		hcf();
 	}
+
+	init_serial();
+
+	// Attempt to load debug symbols.
+	do {
+		if (kernel_file_request.response == NULL)
+			break;
+
+		Elf64_Ehdr *elf_header = NULL;
+		if ((err = elf64_header(
+				 kernel_file_request.response->kernel_file->address,
+				 &elf_header))) {
+			debug_code(err);
+			break;
+		}
+
+		dwarf_load_sections(elf_header);
+	} while (0);
+
 
 	struct FONT font;
 	PSF2_load_font(&font);
@@ -75,8 +97,6 @@ void kmain(void)
 	init_idt();
 
 	strace(10, NULL, NULL);
-
-	// TODO: Parse debug section
 
 	printf(KINFO "Done. Halting\n");
 	hcf();
