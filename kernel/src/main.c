@@ -67,7 +67,6 @@ void kmain(void)
 		dwarf_load_sections(elf_header);
 	} while (0);
 
-
 	struct FONT font;
 	PSF2_load_font(&font);
 	GRAPHICS_init(&font);
@@ -97,6 +96,12 @@ void kmain(void)
 	init_idt();
 
 	strace(10, NULL, NULL);
+
+	struct LINE_INFO info = {0};
+	if ((err = dwarf_query_line((uintptr_t)dwarf_query_line, &info))) {
+		debug_code(err);
+		abort("Line query failed!");
+	}
 
 	printf(KINFO "Done. Halting\n");
 	hcf();

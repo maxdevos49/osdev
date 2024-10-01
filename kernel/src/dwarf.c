@@ -280,8 +280,21 @@ err_code dwarf_cu_for_address(const uintptr_t instruction_address,
 
 			if (instruction_address >= address &&
 				instruction_address < address + length) {
-				*compilation_unit_header =
+
+				DW_Chdr *cu =
 					(DW_Chdr *)(_ctx.debug_info + arange->debug_info_offset);
+
+				if (cu->version != 5) {
+					debug_code(DW_ERROR_UNSUPPORTED_VERSION);
+					return DW_ERROR_UNSUPPORTED_VERSION;
+				}
+
+				if (cu->unit_type != DW_UT_compile) {
+					debug_code(DW_ERROR_UNSUPPORTED_HEADER);
+					return DW_ERROR_UNSUPPORTED_HEADER;
+				}
+
+				*compilation_unit_header = cu;
 
 				return 0;
 			}
@@ -554,7 +567,7 @@ static err_code _next_die(const DW_Chdr *cu, void **info_ptr,
 err_code dwarf_query_func(const uintptr_t instruction_address,
 						  char **symbol_string)
 {
-	err_code error = 0;
+	err_code err = 0;
 
 	*symbol_string = NULL;
 
@@ -564,24 +577,14 @@ err_code dwarf_query_func(const uintptr_t instruction_address,
 	}
 
 	DW_Chdr *cu = NULL;
-	if ((error = dwarf_cu_for_address((uintptr_t)instruction_address, &cu))) {
-		debug_code(error);
-		return error;
+	if ((err = dwarf_cu_for_address((uintptr_t)instruction_address, &cu))) {
+		debug_code(err);
+		return err;
 	}
 
 	if (cu == NULL) {
 		// Address was not inside a function. This is not considered an error.
 		return 0;
-	}
-
-	if (cu->version != 5) {
-		debug_code(DW_ERROR_UNSUPPORTED_VERSION);
-		return DW_ERROR_UNSUPPORTED_VERSION;
-	}
-
-	if (cu->unit_type != DW_UT_compile) {
-		debug_code(DW_ERROR_UNSUPPORTED_HEADER);
-		return DW_ERROR_UNSUPPORTED_HEADER;
 	}
 
 	void *info_ptr = (void *)cu + sizeof(DW_Chdr);
@@ -594,9 +597,9 @@ err_code dwarf_query_func(const uintptr_t instruction_address,
 	do {
 		struct DIE die = {0};
 
-		error = _next_die(cu, &info_ptr, info_ptr_end, &die);
-		if (error) {
-			return error;
+		if ((err = _next_die(cu, &info_ptr, info_ptr_end, &die))) {
+			debug_code(err);
+			return err;
 		}
 
 		if (die.abbreviation_code == 0 || die.tag_code != DW_TAG_subprogram) {
@@ -628,6 +631,530 @@ err_code dwarf_query_func(const uintptr_t instruction_address,
 		}
 
 	} while ((uintptr_t)info_ptr < info_ptr_end);
+
+	return 0;
+}
+
+err_code dwarf_query_line(const uintptr_t instruction_address,
+						  struct LINE_INFO *info)
+{
+	err_code err = 0;
+
+	if (_ctx.loaded == false) {
+		debug_code(ERROR_DEPENDENCY_NOT_LOADED);
+		return ERROR_DEPENDENCY_NOT_LOADED;
+	}
+
+	if (info == NULL) {
+		debug_code(ERROR_UNEXPECTED_NULL_POINTER);
+		return ERROR_UNEXPECTED_NULL_POINTER;
+	}
+
+	DW_Chdr *cu_hdr = NULL;
+	if ((err = dwarf_cu_for_address((uintptr_t)instruction_address, &cu_hdr))) {
+		debug_code(err);
+		return err;
+	}
+
+	void *info_ptr = (void *)cu_hdr + sizeof(DW_Chdr);
+	uintptr_t info_ptr_end = (uintptr_t)cu_hdr + cu_hdr->length + 4;
+	if (info_ptr_end > (uintptr_t)_ctx.debug_info + _ctx.debug_info_size) {
+		debug_code(ERROR_OUT_OF_BOUNDS);
+		return ERROR_OUT_OF_BOUNDS;
+	}
+
+	if (cu_hdr == NULL) {
+		debug_code(ERROR_UNEXPECTED_NULL_POINTER);
+		return ERROR_UNEXPECTED_NULL_POINTER;
+	}
+
+	//
+	// 1. Find .debug_line section offset
+	//
+
+	struct DIE die = {0};
+	if ((err = _next_die(cu_hdr, &info_ptr, info_ptr_end, &die))) {
+		debug_code(err);
+		return err;
+	}
+
+	if (die.tag_code != DW_TAG_compile_unit) {
+		// DW_TAG_compile_unit was not the first tag in the unit.
+		debug_code(DW_ERROR_INVALID_UNIT);
+		return DW_ERROR_INVALID_UNIT;
+	}
+
+	struct DIE_ATTRIBUTE *stmt_list = _die_attribute(&die, DW_AT_stmt_list);
+	if (stmt_list == NULL) {
+		// DW_TAG_compile_unit tag did not have a DW_AT_stmt_list attribute.
+		debug_code(DW_ERROR_INVALID_UNIT);
+		return DW_ERROR_INVALID_UNIT;
+	}
+
+	uint32_t debug_line_offset = stmt_list->value;
+
+	//
+	// 2. Parse and validate .debug_line header
+	//
+
+	// Is the header start in bounds before we read the header?
+	if ((uintptr_t)_ctx.debug_line + debug_line_offset >=
+		(uintptr_t)_ctx.debug_line + _ctx.debug_line_size) {
+		debug_code(ERROR_OUT_OF_BOUNDS);
+		return ERROR_OUT_OF_BOUNDS;
+	}
+
+	// Is the header end in bounds before we read the header?
+	if ((uintptr_t)_ctx.debug_line + debug_line_offset + sizeof(DW_Lhdr) >=
+		(uintptr_t)_ctx.debug_line + _ctx.debug_line_size) {
+		debug_code(ERROR_OUT_OF_BOUNDS);
+		return ERROR_OUT_OF_BOUNDS;
+	}
+
+	DW_Lhdr *line_hdr = (DW_Lhdr *)(_ctx.debug_line + debug_line_offset);
+
+	printf("\n Offset:                      %#x\n", debug_line_offset);
+	printf(" Length:                      %d\n", line_hdr->unit_length);
+	printf(" DWARF Version:               %d\n", line_hdr->version);
+	// printf(" Address size (bytes):        %d\n", line_hdr->address_size);
+	// printf(" Segment selector (bytes):    %d\n",
+	// 	   line_hdr->segment_selector_size);
+	// printf(" Prologue Length:             %d\n", line_hdr->header_length);
+	// printf(" Minimum Instruction Length:  %d\n",
+	// 	   line_hdr->minimum_instruction_length);
+	// printf(" Maximum Ops per Instruction: %d\n",
+	// 	   line_hdr->maximum_operations_per_instruction);
+	// printf(" Initial value of 'is_stmt':  %d\n", line_hdr->default_is_stmt);
+	// printf(" Line Base:                   %d\n", line_hdr->line_base);
+	// printf(" Line Range:                  %d\n", line_hdr->line_range);
+	// printf(" Opcode Base:                 %d\n\n", line_hdr->opcode_base);
+
+	// printf("Opcodes:\n");
+	// for (int i = 0; i < line_hdr->opcode_base - 1; i++) {
+	// 	printf(" Opcode %d has %d arg(s)\n", i + 1,
+	// 		   line_hdr->standard_opcode_lengths[i]);
+	// }
+
+	void *line_prologue_ptr = (void *)line_hdr + sizeof(DW_Lhdr);
+	uintptr_t line_prologue_end =
+		(uintptr_t)line_hdr + offsetof(DW_Lhdr, minimum_instruction_length) +
+		line_hdr->header_length;
+
+	// Is the header prologue end within bounds before we start reading after
+	// the header?
+	if (line_prologue_end > (uintptr_t)_ctx.debug_line + _ctx.debug_line_size) {
+		debug_code(ERROR_OUT_OF_BOUNDS);
+		return ERROR_OUT_OF_BOUNDS;
+	}
+
+	uint8_t directory_entry_format_count = 0;
+	if ((err = read_u8(&line_prologue_ptr, line_prologue_end,
+					   &directory_entry_format_count))) {
+		debug_code(err);
+		return err;
+	}
+	printf("\nDirectory entry format count: %d\n",
+		   directory_entry_format_count);
+
+	uint16_t directory_entry_types[directory_entry_format_count];
+	uint16_t directory_entry_formats[directory_entry_format_count];
+
+	for (int i = 0; i < directory_entry_format_count; i++) {
+		uint16_t type = 0;
+		if ((err =
+				 leb128_to_u16(&line_prologue_ptr, line_prologue_end, &type))) {
+			debug_code(err);
+			return err;
+		}
+
+		directory_entry_types[i] = type;
+
+		uint16_t form = 0;
+		if ((err =
+				 leb128_to_u16(&line_prologue_ptr, line_prologue_end, &form))) {
+			debug_code(err);
+			return err;
+		}
+
+		directory_entry_formats[i] = form;
+
+		printf("Directory entry type:format: %x:%x\n", directory_entry_types[i],
+			   directory_entry_formats[i]);
+	}
+
+	uint16_t directory_count = 0;
+	if ((err = leb128_to_u16(&line_prologue_ptr, line_prologue_end,
+							 &directory_count))) {
+		debug_code(err);
+		return err;
+	}
+
+	printf("The Directory Table (offset %#lx, lines %d, columns %d):\n",
+		   (uintptr_t)line_prologue_ptr - (uintptr_t)_ctx.debug_line,
+		   directory_count, directory_entry_format_count);
+
+	printf(" Entry Name\n");
+	for (int i = 0; i < directory_count; i++) {
+		uint32_t str_offset = 0;
+		if ((err = read_u32(&line_prologue_ptr, line_prologue_end,
+							&str_offset))) {
+			debug_code(err);
+			return err;
+		}
+
+		printf(" %d (indirect line string, offset: %#x): %s\n", i, str_offset,
+			   DEBUG_LINE_STR(str_offset));
+	}
+
+	uint8_t file_name_entry_format_count = 0;
+	if ((err = read_u8(&line_prologue_ptr, line_prologue_end,
+					   &file_name_entry_format_count))) {
+		debug_code(err);
+		return err;
+	}
+	printf("\nFile entry format count: %d\n", file_name_entry_format_count);
+
+	uint16_t file_entry_types[file_name_entry_format_count];
+	uint16_t file_entry_formats[file_name_entry_format_count];
+	for (int i = 0; i < file_name_entry_format_count; i++) {
+		uint16_t type = 0;
+		if ((err =
+				 leb128_to_u16(&line_prologue_ptr, line_prologue_end, &type))) {
+			debug_code(err);
+			return err;
+		}
+
+		file_entry_types[i] = type;
+
+		uint16_t form = 0;
+		if ((err =
+				 leb128_to_u16(&line_prologue_ptr, line_prologue_end, &form))) {
+			debug_code(err);
+			return err;
+		}
+
+		file_entry_formats[i] = form;
+
+		printf("Directory entry type:format: %x:%x\n", file_entry_types[i],
+			   file_entry_formats[i]);
+	}
+
+	uint16_t file_names_count = 0;
+	if ((err = leb128_to_u16(&line_prologue_ptr, line_prologue_end,
+							 &file_names_count))) {
+		debug_code(err);
+		return err;
+	}
+
+	printf("\nThe File Name Table (offset %#lx, lines %d, columns %d):\n",
+		   (uintptr_t)line_prologue_ptr - (uintptr_t)_ctx.debug_line,
+		   file_names_count, file_name_entry_format_count);
+
+	printf(" Entry Dir Name\n");
+	for (int i = 0; i < file_names_count; i++) {
+		uint32_t str_offset = 0;
+		if ((err = read_u32(&line_prologue_ptr, line_prologue_end,
+							&str_offset))) {
+			debug_code(err);
+			return err;
+		}
+
+		uint32_t directory_index = 0;
+		if ((err = leb128_to_u32(&line_prologue_ptr, line_prologue_end,
+								 &directory_index))) {
+			debug_code(err);
+			return err;
+		}
+
+		// printf(" %d %d (indirect line string, offset: %#x): %s\n", i,
+		//    directory_index, str_offset, DEBUG_LINE_STR(str_offset));
+	}
+
+	printf("\nLine Number Statements:\n");
+
+	//
+	// 3. Execute line program until we reach the target instruction address
+	//
+
+	void *line_ptr = (void *)line_hdr +
+					 offsetof(DW_Lhdr, minimum_instruction_length) +
+					 line_hdr->header_length;
+	uintptr_t line_ptr_end = (uintptr_t)line_hdr + offsetof(DW_Lhdr, version) +
+							 line_hdr->unit_length;
+
+	// Is the line program pointer within the bounds of the .debug_line section?
+	if (line_ptr_end > (uintptr_t)_ctx.debug_line + _ctx.debug_line_size) {
+		debug_code(ERROR_OUT_OF_BOUNDS);
+		return ERROR_OUT_OF_BOUNDS;
+	}
+
+	struct LINE_REGISTERS registers = {.address = 0,
+									   .op_index = 0,
+									   .file = 1,
+									   .line = 1,
+									   .column = 0,
+									   .is_stmt = line_hdr->default_is_stmt,
+									   .basic_block = false,
+									   .end_sequence = false,
+									   .prologue_end = false,
+									   .epilogue_begin = false,
+									   .isa = 0,
+									   .discriminator = 0};
+
+	do {
+		uint8_t opcode = 0;
+		if ((err = read_u8(&line_ptr, line_ptr_end, &opcode))) {
+			debug_code(err);
+			return err;
+		}
+
+		// Standard opcodes
+		switch (opcode) {
+		case DW_LNS_copy: {
+			// TODO Append row to matrix
+			registers.discriminator = 0;
+			registers.basic_block = false;
+			registers.prologue_end = false;
+			registers.epilogue_begin = false;
+			printf("Copy\n");
+			continue;
+		}
+		case DW_LNS_advance_pc: {
+			uint32_t operation_advance = 0;
+			if ((err = leb128_to_u32(&line_ptr, line_ptr_end,
+									 &operation_advance))) {
+				debug_code(err);
+				return err;
+			}
+
+			uintptr_t old_address = registers.address;
+			uintptr_t new_address =
+				registers.address +
+				line_hdr->minimum_instruction_length *
+					((registers.op_index + operation_advance) /
+					 line_hdr->maximum_operations_per_instruction);
+
+			registers.address = new_address;
+
+			uint32_t new_op_index =
+				(registers.op_index + operation_advance) %
+				line_hdr->maximum_operations_per_instruction;
+
+			registers.op_index = new_op_index;
+
+			printf("Advance PC by %ld to %#018lx\n", new_address - old_address,
+				   new_address);
+			continue;
+		}
+		case DW_LNS_advance_line: {
+			uint32_t line = 0;
+			if ((err = leb128_to_u32(&line_ptr, line_ptr_end, &line))) {
+				debug_code(err);
+				return err;
+			}
+
+			printf("Advance Line by %d to %d\n", line, registers.line + line);
+
+			registers.line += line;
+			continue;
+		}
+		case DW_LNS_set_file: {
+			uint32_t file = 0;
+			if ((err = leb128_to_u32(&line_ptr, line_ptr_end, &file))) {
+				debug_code(err);
+				return err;
+			}
+
+			registers.file = file;
+
+			printf("Set File Name to entry %d in the File Name Table\n", file);
+			continue;
+		}
+		case DW_LNS_set_column: {
+			uint32_t column = 0;
+			if ((err = leb128_to_u32(&line_ptr, line_ptr_end, &column))) {
+				debug_code(err);
+				return err;
+			}
+
+			registers.column = column;
+
+			printf("Set column to %d\n", registers.column);
+			continue;
+		}
+		case DW_LNS_negate_stmt: {
+			registers.is_stmt = !registers.is_stmt;
+			printf("Set is_stmt to %d\n", registers.is_stmt);
+			continue;
+		}
+		case DW_LNS_set_basic_block: {
+			registers.basic_block = true;
+			continue;
+		}
+		case DW_LNS_const_add_pc: {
+			uint8_t adjusted_opcode = 255 - line_hdr->opcode_base;
+			uint8_t operation_advance = adjusted_opcode / line_hdr->line_range;
+
+			uintptr_t new_address =
+				registers.address +
+				line_hdr->minimum_instruction_length *
+					((registers.op_index + operation_advance) /
+					 line_hdr->maximum_operations_per_instruction);
+
+			uintptr_t old_address = registers.address;
+			registers.address = new_address;
+
+			uint32_t new_op_index =
+				(registers.op_index + operation_advance) %
+				line_hdr->maximum_operations_per_instruction;
+
+			registers.op_index = new_op_index;
+
+			printf("Advance PC by constant %ld to %#018lx\n",
+				   new_address - old_address, new_address);
+			continue;
+		}
+		case DW_LNS_fixed_advance_pc: {
+			// TODO
+			break;
+		}
+		case DW_LNS_set_prologue_end: {
+			registers.prologue_end = true;
+			continue;
+		}
+		case DW_LNS_set_epilogue_begin: {
+			registers.epilogue_begin = true;
+			continue;
+		}
+		case DW_LNS_set_isa: {
+			uint32_t isa = 0;
+			if ((err = leb128_to_u32(&line_ptr, line_ptr_end, &isa))) {
+				debug_code(err);
+				return err;
+			}
+
+			registers.isa = isa;
+			continue;
+		}
+		}
+
+		// Extended opcodes start with a zero byte
+		if (opcode == 0) {
+			uint8_t opcode_size = 0;
+			if ((err = leb128_to_u8(&line_ptr, line_ptr_end, &opcode_size))) {
+				debug_code(err);
+				return err;
+			}
+
+			uint8_t extended_opcode = 0;
+			if ((err = read_u8(&line_ptr, line_ptr_end, &extended_opcode))) {
+				debug_code(err);
+				return err;
+			}
+
+			switch (extended_opcode) {
+			case DW_LNS_EX_end_sequence: {
+				registers.end_sequence = true;
+
+				// TODO Append row to matrix.
+
+				printf("Extended opcode 1: End of Sequence\n\n");
+
+				registers.address = 0;
+				registers.op_index = 0;
+				registers.file = 1;
+				registers.line = 1;
+				registers.column = 0;
+				registers.is_stmt = line_hdr->default_is_stmt;
+				registers.basic_block = false;
+				registers.end_sequence = false;
+				registers.prologue_end = false;
+				registers.epilogue_begin = false;
+				registers.isa = 0;
+				registers.discriminator = 0;
+
+				continue;
+			}
+			case DW_LNS_EX_set_address: {
+				uint64_t address = 0;
+				if ((err = read_u64(&line_ptr, line_ptr_end, &address))) {
+					debug_code(err);
+					return err;
+				}
+
+				registers.address = address;
+				registers.op_index = 0;
+
+				printf("Extended opcode %d: set address to %#lx\n",
+					   extended_opcode, address);
+				continue;
+			}
+			case DW_LNS_EX_set_discriminator: {
+				uint32_t discriminator = 0;
+				if ((err = leb128_to_u32(&line_ptr, line_ptr_end,
+										 &discriminator))) {
+					debug_code(err);
+					return err;
+				}
+				printf("Extended opcode %d: set discriminator to %d\n",
+					   extended_opcode, discriminator);
+
+				registers.discriminator = discriminator;
+				continue;
+			}
+			}
+
+			printf(KERROR "Unknown extended opcode: %x\n", extended_opcode);
+			abort("STOP!");
+		}
+
+		if (opcode > line_hdr->opcode_base) {
+			uint8_t adjusted_opcode = opcode - line_hdr->opcode_base;
+			uint8_t operation_advance = adjusted_opcode / line_hdr->line_range;
+
+			uintptr_t new_address =
+				registers.address +
+				line_hdr->minimum_instruction_length *
+					((registers.op_index + operation_advance) /
+					 line_hdr->maximum_operations_per_instruction);
+
+			uintptr_t previous_address = registers.address;
+			registers.address = new_address;
+
+			uint32_t new_op_index =
+				(registers.op_index + operation_advance) %
+				line_hdr->maximum_operations_per_instruction;
+
+			registers.op_index = new_op_index;
+
+			int32_t line_increment =
+				line_hdr->line_base + (adjusted_opcode % line_hdr->line_range);
+
+			registers.line += line_increment;
+
+			printf("Special opcode %d: advance address by %ld to %#018lx and "
+				   "line by %d to %d\n",
+				   adjusted_opcode, new_address - previous_address, new_address,
+				   line_increment, registers.line);
+
+			// TODO: 3. Append copy of row to the matrix
+
+			registers.basic_block = false;
+			registers.prologue_end = false;
+			registers.epilogue_begin = false;
+			registers.discriminator = 0;
+
+			continue;
+		}
+
+		printf(KERROR "Unknown standard opcode: %x\n", opcode);
+		abort("STOP!");
+
+	} while ((uintptr_t)line_ptr < line_ptr_end);
+
+	// Execute the pt
+
+	printf("Line is %d:%d\n", registers.line, registers.column);
 
 	return 0;
 }
