@@ -140,7 +140,7 @@ err_code leb128_to_s8(void **stream, uintptr_t stream_end, int8_t *output)
 
 	err_code err = 0;
 	if ((err = decode_sleb128((uint8_t **)stream, stream_end, &temp,
-							  sizeof(int8_t)))) {
+							  sizeof(int8_t) * 8))) {
 		debug_code(err);
 		return err;
 	}
@@ -157,7 +157,7 @@ err_code leb128_to_s16(void **stream, uintptr_t stream_end, int16_t *output)
 
 	err_code err = 0;
 	if ((err = decode_sleb128((uint8_t **)stream, stream_end, &temp,
-							  sizeof(int16_t)))) {
+							  sizeof(int16_t) * 8))) {
 		debug_code(err);
 		return err;
 	}
@@ -174,7 +174,7 @@ err_code leb128_to_s32(void **stream, uintptr_t stream_end, int32_t *output)
 
 	err_code err = 0;
 	if ((err = decode_sleb128((uint8_t **)stream, stream_end, &temp,
-							  sizeof(int32_t)))) {
+							  sizeof(int32_t) * 8))) {
 		debug_code(err);
 		return err;
 	}
@@ -189,7 +189,7 @@ err_code leb128_to_s64(void **stream, uintptr_t stream_end, int64_t *output)
 {
 	err_code err = 0;
 	if ((err = decode_sleb128((uint8_t **)stream, stream_end, output,
-							  sizeof(int64_t)))) {
+							  sizeof(int64_t) * 8))) {
 		debug_code(err);
 		return err;
 	}

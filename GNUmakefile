@@ -28,6 +28,7 @@ run-x86_64: ovmf/ovmf-code-x86_64.fd ovmf/ovmf-vars-x86_64.fd $(IMAGE_NAME).iso
 		-M q35 \
 		-no-reboot \
 		-no-shutdown \
+		-serial file:serial.log \
 		-d int \
 		-drive if=pflash,unit=0,format=raw,file=ovmf/ovmf-code-x86_64.fd,readonly=on \
 		-drive if=pflash,unit=1,format=raw,file=ovmf/ovmf-vars-x86_64.fd \
@@ -39,6 +40,7 @@ run-hdd-x86_64: ovmf/ovmf-code-x86_64.fd ovmf/ovmf-vars-x86_64.fd $(IMAGE_NAME).
 	qemu-system-x86_64 \
 		-M q35 \
 		-d int \
+		-serial file:serial.log \
 		-no-reboot \
 		-no-shutdown \
 		-drive if=pflash,unit=0,format=raw,file=ovmf/ovmf-code-x86_64.fd,readonly=on \
@@ -53,6 +55,7 @@ run-x86_64-debug: ovmf/ovmf-code-x86_64.fd ovmf/ovmf-vars-x86_64.fd $(IMAGE_NAME
 		-s -S \
 		-no-reboot \
 		-no-shutdown \
+		-serial file:serial.log \
 		-monitor stdio\
 		-drive if=pflash,unit=0,format=raw,file=ovmf/ovmf-code-x86_64.fd,readonly=on \
 		-drive if=pflash,unit=1,format=raw,file=ovmf/ovmf-vars-x86_64.fd \

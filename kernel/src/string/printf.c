@@ -1,10 +1,10 @@
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
-#include "utility.h"
-#include "../graphics/graphics.h"
 #include "../devices/tty.h"
+#include "../graphics/graphics.h"
 #include "../serial.h"
+#include "utility.h"
 
 int printf(const char *restrict format, ...)
 {
@@ -17,13 +17,11 @@ int printf(const char *restrict format, ...)
 
 	va_end(args);
 
-	for (size_t i = 0; i < written; i++)
-	{
+	for (size_t i = 0; i < written; i++) {
 		serial_write(buffer[i]);
 	}
 
-	if (TTY_ready())
-	{
+	if (TTY_ready()) {
 		TTY_puts(buffer);
 	}
 

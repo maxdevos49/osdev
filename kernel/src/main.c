@@ -97,12 +97,6 @@ void kmain(void)
 
 	strace(10, NULL, NULL);
 
-	struct LINE_INFO info = {0};
-	if ((err = dwarf_query_line((uintptr_t)dwarf_query_line, &info))) {
-		debug_code(err);
-		abort("Line query failed!");
-	}
-
 	printf(KINFO "Done. Halting\n");
 	hcf();
 }
