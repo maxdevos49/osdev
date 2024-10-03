@@ -636,7 +636,7 @@ err_code dwarf_query_func(const uintptr_t instruction_address,
 }
 
 err_code dwarf_query_line(const uintptr_t instruction_address,
-						  struct LINE_INFO *info)
+						  enum LINE_SELECT line_select, struct LINE_INFO *info)
 {
 	err_code err = 0;
 
@@ -879,6 +879,20 @@ err_code dwarf_query_line(const uintptr_t instruction_address,
 		return ERROR_OUT_OF_BOUNDS;
 	}
 
+	struct LINE_REGISTERS previous_registers = {.address = 0,
+												.op_index = 0,
+												.file = 1,
+												.line = 1,
+												.column = 0,
+												.is_stmt =
+													line_hdr->default_is_stmt,
+												.basic_block = false,
+												.end_sequence = false,
+												.prologue_end = false,
+												.epilogue_begin = false,
+												.isa = 0,
+												.discriminator = 0};
+
 	struct LINE_REGISTERS registers = {.address = 0,
 									   .op_index = 0,
 									   .file = 1,
@@ -901,12 +915,25 @@ err_code dwarf_query_line(const uintptr_t instruction_address,
 
 		// Standard opcodes
 		if (opcode == DW_LNS_copy) {
-			// Instead of building a matrix, whenever we are supposed to append
-			// a new row we are instead just checking if we are at our target
-			// address. If we are then we break out of the loop.
-			if (registers.address == instruction_address) {
+
+			// printf(" Address: %016lx op-index: %x Line: %-4d Column: %-2d\n",
+			// 	   registers.address, registers.op_index, registers.line,
+			// 	   registers.column);
+
+			if (line_select == EXACT_LINE) {
+				if (registers.address > instruction_address) {
+					registers = previous_registers;
+					break;
+				} else if (registers.address == instruction_address) {
+					break;
+				}
+			} else if (line_select == PREVIOUS_LINE &&
+					   registers.address >= instruction_address) {
+				registers = previous_registers;
 				break;
 			}
+
+			previous_registers = registers;
 
 			registers.discriminator = 0;
 			registers.basic_block = false;
@@ -1015,13 +1042,25 @@ err_code dwarf_query_line(const uintptr_t instruction_address,
 			if (extended_opcode == DW_LNS_EX_end_sequence) {
 				registers.end_sequence = true;
 
-				// Instead of building a matrix, whenever we are supposed to
-				// append
-				// a new row we are instead just checking if we are at our
-				// target address. If we are then we break out of the loop.
-				if (registers.address == instruction_address) {
+				// printf(
+				// 	" Address: %016lx op-index: %x Line: %-4d Column: %-2d\n\n",
+				// 	registers.address, registers.op_index, registers.line,
+				// 	registers.column);
+
+				if (line_select == EXACT_LINE) {
+					if (registers.address > instruction_address) {
+						registers = previous_registers;
+						break;
+					} else if (registers.address == instruction_address) {
+						break;
+					}
+				} else if (line_select == PREVIOUS_LINE &&
+						   registers.address >= instruction_address) {
+					registers = previous_registers;
 					break;
 				}
+
+				previous_registers = registers;
 
 				registers.address = 0;
 				registers.op_index = 0;
@@ -1076,12 +1115,24 @@ err_code dwarf_query_line(const uintptr_t instruction_address,
 			registers.line +=
 				line_hdr->line_base + (adjusted_opcode % line_hdr->line_range);
 
-			// Instead of building a matrix, whenever we are supposed to append
-			// a new row we are instead just checking if we are at our target
-			// address. If we are then we break out of the loop.
-			if (registers.address == instruction_address) {
+			// printf(" Address: %016lx op-index: %x Line: %-4d Column: %-2d\n",
+			// 	   registers.address, registers.op_index, registers.line,
+			// 	   registers.column);
+
+			if (line_select == EXACT_LINE) {
+				if (registers.address > instruction_address) {
+					registers = previous_registers;
+					break;
+				} else if (registers.address == instruction_address) {
+					break;
+				}
+			} else if (line_select == PREVIOUS_LINE &&
+					   registers.address >= instruction_address) {
+				registers = previous_registers;
 				break;
 			}
+
+			previous_registers = registers;
 
 			registers.basic_block = false;
 			registers.prologue_end = false;
@@ -1093,6 +1144,11 @@ err_code dwarf_query_line(const uintptr_t instruction_address,
 		printf(KERROR "Unknown standard opcode: %x\n", opcode);
 		abort("STOP!");
 	} while ((uintptr_t)line_ptr < line_ptr_end);
+
+	if ((uintptr_t)line_ptr >= line_ptr_end) {
+		printf("Line not found\n");
+		return -1;
+	}
 
 	info->line = registers.line;
 	info->column = registers.column;

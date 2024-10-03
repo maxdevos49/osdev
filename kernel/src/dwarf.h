@@ -329,14 +329,15 @@ enum DW_LNS_EX {
 	DW_LNS_EX_set_discriminator = 0x04,
 };
 
-err_code
-dwarf_load_sections(const Elf64_Ehdr *restrict elf_header);
+err_code dwarf_load_sections(const Elf64_Ehdr *restrict elf_header);
 
 err_code dwarf_cu_for_address(const uintptr_t instruction_address,
 							  DW_Chdr **cu_output);
 
 err_code dwarf_query_func(const uintptr_t instruction_address,
 						  char **symbol_string);
+
+enum LINE_SELECT { PREVIOUS_LINE, EXACT_LINE };
 
 struct LINE_INFO {
 	uint64_t line;
@@ -346,6 +347,6 @@ struct LINE_INFO {
 };
 
 err_code dwarf_query_line(const uintptr_t instruction_address,
-						  struct LINE_INFO *info);
+						  enum LINE_SELECT line_select, struct LINE_INFO *info);
 
 #endif

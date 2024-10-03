@@ -34,7 +34,8 @@ void strace(int max_frames, void *starting_rbp, void *starting_rip)
 	printf("Call trace:\n");
 
 	do {
-		if ((err = dwarf_query_line((uintptr_t)starting_rip, &line))) {
+		if ((err = dwarf_query_line((uintptr_t)starting_rip, EXACT_LINE,
+									&line))) {
 			debug_code(err);
 			break;
 		}
@@ -48,14 +49,17 @@ void strace(int max_frames, void *starting_rbp, void *starting_rip)
 	if (symbol_string == NULL) {
 		printf("\t[%#018lx]\n", (uintptr_t)starting_rip);
 	} else {
-		printf("\t[%#018lx] at %s (%s/%s:%ld:%d)\n", (uintptr_t)starting_rip,
-			   symbol_string, line.path, line.file, line.line, line.column);
+		printf("\t[%#018lx] at %s (%s/%s:%ld)\n", (uintptr_t)starting_rip,
+			   symbol_string, line.path, line.file, line.line);
 	}
 
 	for (int i = 0; stack != NULL && stack->rip != 0 && i < max_frames; i++) {
 
 		do {
-			if ((err = dwarf_query_line(stack->rip, &line))) {
+			// We query for the previous line at the address because the stack
+			// includes the return instruction address instead of the calling
+			// address. This works as long as
+			if ((err = dwarf_query_line(stack->rip, PREVIOUS_LINE, &line))) {
 				debug_code(err);
 				break;
 			}
@@ -69,8 +73,8 @@ void strace(int max_frames, void *starting_rbp, void *starting_rip)
 		if (symbol_string == NULL) {
 			printf("\t[%#018lx]\n", stack->rip);
 		} else {
-			printf("\t[%#018lx] at %s (%s/%s:%ld:%d)\n", (uintptr_t)stack->rip,
-				   symbol_string, line.path, line.file, line.line, line.column);
+			printf("\t[%#018lx] at %s (%s/%s:%ld)\n", (uintptr_t)stack->rip,
+				   symbol_string, line.path, line.file, line.line);
 		}
 
 		stack = stack->rbp;
