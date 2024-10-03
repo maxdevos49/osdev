@@ -9,7 +9,6 @@
 #include "devices/tty.h"
 #include "dwarf.h"
 #include "elf.h"
-#include "error.h"
 #include "fonts/font.h"
 #include "gdt.h"
 #include "graphics/graphics.h"
@@ -17,6 +16,7 @@
 #include "macro.h"
 #include "memory/memory.h"
 #include "memory/stack.h"
+#include "panic.h"
 #include "serial.h"
 #include "string/utility.h"
 
@@ -25,28 +25,13 @@ ATTR_REQUEST static volatile LIMINE_BASE_REVISION(2);
 ATTR_REQUEST volatile struct limine_kernel_file_request kernel_file_request = {
 	.id = LIMINE_KERNEL_FILE_REQUEST, .revision = 0};
 
-NO_RETURN static void hcf()
-{
-	for (;;) {
-		asm("hlt");
-	}
-}
-
-NO_RETURN void abort(const char *error)
-{
-	set_stroke(GRAPHICS_get_global_context(), 0xff0000);
-	printf("[ABORT] %s\n", error);
-
-	hcf();
-}
-
 void kmain(void)
 {
 	err_code err = 0;
 
 	// Ensure the bootloader actually understands our base revision (see spec).
 	if (LIMINE_BASE_REVISION_SUPPORTED == false) {
-		hcf();
+		halt();
 	}
 
 	init_serial();
@@ -98,5 +83,5 @@ void kmain(void)
 	strace(10, NULL, NULL);
 
 	printf(KINFO "Done. Halting\n");
-	hcf();
+	halt();
 }

@@ -1,6 +1,5 @@
 #include <limine.h>
 #include <stddef.h>
-#include "error.h"
 #include "string/utility.h"
 
 #include "elf64.h"

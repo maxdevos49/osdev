@@ -1,8 +1,8 @@
 #include "idt.h"
-#include "error.h"
 #include "instruction.h"
 #include "macro.h"
 #include "memory/stack.h"
+#include "panic.h"
 #include "string/utility.h"
 #include <stdint.h>
 
@@ -224,5 +224,6 @@ void isr_exception_handler(struct INTERRUPT_STACK *stack)
 		   stack->dr1, stack->dr2, stack->dr3);
 	printf("DR6=%016lx  DR7=%016lx\n", stack->dr6, stack->dr7);
 
-	abort("System will now halt\n");
+	printf("System will now halt\n");
+	halt();
 }

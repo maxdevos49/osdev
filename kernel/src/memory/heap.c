@@ -1,14 +1,13 @@
-#include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
-#include <macro.h>
-#include "virtual.h"
-#include "physical.h"
-#include "../error.h"
 #include "../string/utility.h"
+#include "panic.h"
+#include "physical.h"
+#include "virtual.h"
+#include <macro.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
-struct HEAP_BLOCK
-{
+struct HEAP_BLOCK {
 	size_t length;
 	uint64_t free;
 	struct HEAP_BLOCK *previous;
@@ -23,10 +22,12 @@ void print_heap(void)
 {
 	struct HEAP_BLOCK *ptr = _root_block;
 	printf("=======Heap report=======\n");
-	do
-	{
-		printf("Block Address: %p Size: %lu bytes Status: %s\n", ptr, ptr->length, ptr->free ? "Free" : "Allocated");
-		printf("\tPrevious:      %p\n\tNext:          %p\n\tNext Free      %p\n", ptr->previous, ptr->next, ptr->next_free);
+	do {
+		printf("Block Address: %p Size: %lu bytes Status: %s\n", ptr,
+			   ptr->length, ptr->free ? "Free" : "Allocated");
+		printf(
+			"\tPrevious:      %p\n\tNext:          %p\n\tNext Free      %p\n",
+			ptr->previous, ptr->next, ptr->next_free);
 		ptr = ptr->next;
 	} while (ptr != NULL);
 }
@@ -36,33 +37,26 @@ void *kmalloc(size_t size)
 	// Minimum allocated size is 8 bytes.
 	uint64_t rem = size % 8;
 	size -= rem;
-	if (rem != 0)
-	{
+	if (rem != 0) {
 		size += 8;
 	}
 
 	// Find a block which is big enough for the requested size
 	struct HEAP_BLOCK *block = _first_free_block;
-	while (block != NULL && block->length < size)
-	{
+	while (block != NULL && block->length < size) {
 		block = block->next_free;
 	}
 
-	if (block == NULL)
-	{
+	if (block == NULL) {
 		// No sufficient length memory blocks are available
-		printf(KERROR "Aborting! Not enough memory left to malloc %'lu bytes", size);
-		abort("Heap out of memory! Time to implement mapping new heap memory");
-		return NULL;
+		panicf("Not enough memory left to malloc %'lu bytes", size);
 	}
 
 	// A free block was found which is exactly as big as needed.
-	if (block->length == size)
-	{
+	if (block->length == size) {
 		block->free = 0;
 
-		if (block == _first_free_block)
-		{
+		if (block == _first_free_block) {
 			_first_free_block = block->next_free;
 		}
 
@@ -77,17 +71,18 @@ void *kmalloc(size_t size)
 	// "cleaved" off into a new block
 	//
 
-	// TODO check if we have enough space for a valid cleaved block(Don't overflow)
+	// TODO check if we have enough space for a valid cleaved block(Don't
+	// overflow)
 
-	struct HEAP_BLOCK *cleaved_block = ((void *)block) + sizeof(struct HEAP_BLOCK) + size;
+	struct HEAP_BLOCK *cleaved_block =
+		((void *)block) + sizeof(struct HEAP_BLOCK) + size;
 	cleaved_block->length = block->length - (sizeof(struct HEAP_BLOCK) + size);
 	cleaved_block->free = 1;
 	cleaved_block->previous = block;
 	cleaved_block->next = block->next;
 	cleaved_block->next_free = block->next_free;
 
-	if (cleaved_block->next != NULL)
-	{
+	if (cleaved_block->next != NULL) {
 		cleaved_block->next->previous = cleaved_block;
 	}
 
@@ -96,13 +91,11 @@ void *kmalloc(size_t size)
 	block->next = cleaved_block;
 	block->next_free = cleaved_block;
 
-	if (block->previous != NULL)
-	{
+	if (block->previous != NULL) {
 		block->previous->next_free = cleaved_block;
 	}
 
-	if (cleaved_block < _first_free_block || block == _first_free_block)
-	{
+	if (cleaved_block < _first_free_block || block == _first_free_block) {
 		_first_free_block = cleaved_block;
 	}
 
@@ -114,60 +107,53 @@ void *kmalloc(size_t size)
 
 void kfree(void *ptr)
 {
-	if (ptr == NULL)
-	{
-		printf("Aborting! Can't free a null pointer!"); // TODO proper abort
+	if (ptr == NULL) {
+		panicf("Attempt to free null pointer.");
 		return;
 	}
 
 	struct HEAP_BLOCK *block = ptr - sizeof(struct HEAP_BLOCK);
 	block->free = 1;
 
-	if (block < _first_free_block)
-	{
+	if (block < _first_free_block) {
 		_first_free_block = block;
 	}
 
-	if (block->previous != NULL)
-	{
+	if (block->previous != NULL) {
 		block->previous->next_free = block;
 	}
 
 	// Maybe absorb the next block if its free
 	struct HEAP_BLOCK *next_block = block->next;
-	if (next_block != NULL && next_block->free)
-	{
-		if (next_block->next != NULL)
-		{
+	if (next_block != NULL && next_block->free) {
+		if (next_block->next != NULL) {
 			next_block->next->previous = block;
 		}
 
-		block->length = block->length + sizeof(struct HEAP_BLOCK) + next_block->length;
+		block->length =
+			block->length + sizeof(struct HEAP_BLOCK) + next_block->length;
 		block->next = next_block->next;
 		block->next_free = next_block->next_free;
 
-		if (block < _first_free_block)
-		{
+		if (block < _first_free_block) {
 			_first_free_block = block;
 		}
 	}
 
 	// Maybe merge with previous block
 	struct HEAP_BLOCK *previous_block = block->previous;
-	if (previous_block != NULL && previous_block->free)
-	{
-		previous_block->length = previous_block->length + sizeof(struct HEAP_BLOCK) + block->length;
+	if (previous_block != NULL && previous_block->free) {
+		previous_block->length =
+			previous_block->length + sizeof(struct HEAP_BLOCK) + block->length;
 		previous_block->free = 1;
 		previous_block->next = block->next;
 		previous_block->next_free = block->next_free;
 
-		if (block->next != NULL)
-		{
+		if (block->next != NULL) {
 			block->next->previous = previous_block;
 		}
 
-		if (previous_block < _first_free_block)
-		{
+		if (previous_block < _first_free_block) {
 			_first_free_block = previous_block;
 		}
 	}
@@ -180,14 +166,14 @@ void init_heap(void *heap_address, size_t size)
 	printf("\tInitial Heap size: %'lu bytes\n", size);
 
 	phys_addr_t physical_address = allocate_memory(size);
-	if (physical_address == INVALID_PHYS)
-	{
-		abort("Insufficent contiguous physical memory to initialize the heap.");
+	if (physical_address == INVALID_PHYS) {
+		panicf(
+			"Insufficent contiguous physical memory to initialize the heap.");
 	}
 
-	if (map_memory(physical_address, (virt_addr_t)heap_address, size, PAGE_MAP_WRITEABLE) == false)
-	{
-		abort("Failed to map virtual memory for the kernel heap\n");
+	if (map_memory(physical_address, (virt_addr_t)heap_address, size,
+				   PAGE_MAP_WRITEABLE) == false) {
+		panicf("Failed to map virtual memory for the kernel heap\n");
 	}
 
 	_root_block = (struct HEAP_BLOCK *)heap_address;

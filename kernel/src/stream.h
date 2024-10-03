@@ -3,7 +3,6 @@
 
 #include "./string/utility.h"
 #include "debug.h"
-#include "error.h"
 #include "type.h"
 #include <stdint.h>
 

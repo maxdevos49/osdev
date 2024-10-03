@@ -1,7 +1,7 @@
-#include "../error.h"
 #include "../macro.h"
 #include "../string/utility.h"
 #include "heap.h"
+#include "panic.h"
 #include "physical.h"
 #include "virtual.h"
 #include <limine.h>
@@ -52,23 +52,23 @@ void print_memory_layout(void)
 void init_memory(void)
 {
 	if (memmap_request.response == NULL) {
-		abort("Limine response to 'limine_memmap_request' was null\n");
+		panicf("Limine response to 'limine_memmap_request' was null\n");
 		return;
 	}
 
 	if (memmap_request.response->entry_count == 0 ||
 		memmap_request.response->entries == NULL) {
-		abort("Limine memory map is empty\n");
+		panicf("Limine memory map is empty\n");
 		return;
 	}
 
 	if (hhdm_request.response == NULL) {
-		abort("Limine response to 'hhdm_request' was null\n");
+		panicf("Limine response to 'hhdm_request' was null\n");
 		return;
 	}
 
 	if (kernel_address_request.response == NULL) {
-		abort("Limine response to 'kernel_address_request' was null\n");
+		panicf("Limine response to 'kernel_address_request' was null\n");
 		return;
 	}
 

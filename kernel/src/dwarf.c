@@ -1,8 +1,8 @@
 #include "dwarf.h"
 #include "debug.h"
 #include "elf.h"
-#include "error.h"
 #include "memory/heap.h"
+#include "panic.h"
 #include "stdbool.h"
 #include "stream.h"
 #include "string/utility.h"
@@ -546,10 +546,9 @@ static err_code _next_die(const DW_Chdr *cu, void **info_ptr,
 			};
 
 			default:
-				printf(KERROR "Tag: %x\n", tag_code);
-				printf(KERROR "Attribute: %x\n", attribute);
-				printf(KERROR "Form: %x\n", form);
-				abort("Unknown DWARF attribute form!\n");
+				panicf("Unknown DWARF attribute form.\nTag: %x\nAttribute: "
+					   "%x\nForm: %x\n",
+					   tag_code, attribute, form);
 			}
 		}
 
@@ -916,10 +915,6 @@ err_code dwarf_query_line(const uintptr_t instruction_address,
 		// Standard opcodes
 		if (opcode == DW_LNS_copy) {
 
-			// printf(" Address: %016lx op-index: %x Line: %-4d Column: %-2d\n",
-			// 	   registers.address, registers.op_index, registers.line,
-			// 	   registers.column);
-
 			if (line_select == EXACT_LINE) {
 				if (registers.address > instruction_address) {
 					registers = previous_registers;
@@ -1042,11 +1037,6 @@ err_code dwarf_query_line(const uintptr_t instruction_address,
 			if (extended_opcode == DW_LNS_EX_end_sequence) {
 				registers.end_sequence = true;
 
-				// printf(
-				// 	" Address: %016lx op-index: %x Line: %-4d Column: %-2d\n\n",
-				// 	registers.address, registers.op_index, registers.line,
-				// 	registers.column);
-
 				if (line_select == EXACT_LINE) {
 					if (registers.address > instruction_address) {
 						registers = previous_registers;
@@ -1097,8 +1087,7 @@ err_code dwarf_query_line(const uintptr_t instruction_address,
 				continue;
 			}
 
-			printf(KERROR "Unknown extended opcode: %x\n", extended_opcode);
-			abort("STOP!");
+			panicf("Unknown extended opcode: %x\n", extended_opcode);
 		}
 
 		if (opcode > line_hdr->opcode_base) {
@@ -1114,10 +1103,6 @@ err_code dwarf_query_line(const uintptr_t instruction_address,
 
 			registers.line +=
 				line_hdr->line_base + (adjusted_opcode % line_hdr->line_range);
-
-			// printf(" Address: %016lx op-index: %x Line: %-4d Column: %-2d\n",
-			// 	   registers.address, registers.op_index, registers.line,
-			// 	   registers.column);
 
 			if (line_select == EXACT_LINE) {
 				if (registers.address > instruction_address) {
@@ -1141,8 +1126,7 @@ err_code dwarf_query_line(const uintptr_t instruction_address,
 			continue;
 		}
 
-		printf(KERROR "Unknown standard opcode: %x\n", opcode);
-		abort("STOP!");
+		panicf(KERROR "Unknown standard opcode: %x\n", opcode);
 	} while ((uintptr_t)line_ptr < line_ptr_end);
 
 	if ((uintptr_t)line_ptr >= line_ptr_end) {

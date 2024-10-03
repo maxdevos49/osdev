@@ -2,7 +2,6 @@
 #include <stdint.h>
 
 #include "../devices/tty.h"
-#include "../graphics/graphics.h"
 #include "../serial.h"
 #include "utility.h"
 

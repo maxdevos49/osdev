@@ -2,7 +2,6 @@
 #include "debug.h"
 #include "dwarf.h"
 #include "elf.h"
-#include "error.h"
 #include "limine.h"
 #include "macro.h"
 #include "type.h"

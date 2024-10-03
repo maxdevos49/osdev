@@ -1,8 +1,8 @@
 #include "physical.h"
-#include "../error.h"
 #include "../macro.h"
 #include "../string/utility.h"
 #include "memory.h"
+#include "panic.h"
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -236,7 +236,7 @@ struct MEMORY_BITMAP init_physical_memory(void)
 	}
 
 	if (suitable_bitmap_entry == NULL) {
-		abort("Failed to find a memory region for the paging bitmap.\n");
+		panicf("Failed to find a memory region for the paging bitmap.\n");
 	}
 
 	_pm_context.total_pages = total_system_memory_in_bytes / PAGE_BYTE_SIZE;
@@ -263,18 +263,16 @@ struct MEMORY_BITMAP init_physical_memory(void)
 		}
 
 		if (release_memory(entry->base, entry->length) == false) {
-			printf(KERROR "Failed to release memory region %#018lx - %#018lx\n",
+			panicf("Failed to release memory region %#018lx - %#018lx\n",
 				   entry->base, entry->base + entry->length - 1);
-			abort("^^^^^^"); // Lol lets make a panic, panicp, and panicpf
 		}
 	}
 
 	if (reserve_memory(suitable_bitmap_entry->base, bitmap_size_in_bytes) ==
 		false) {
-		printf(KERROR "Failed to reserve memory region %#018lx - %#018lx\n",
+		panicf("Failed to reserve memory region %#018lx - %#018lx\n",
 			   suitable_bitmap_entry->base,
 			   suitable_bitmap_entry->base + bitmap_size_in_bytes - 1);
-		abort("^^^^^^"); // Lol lets make a panic, panicp, and panicpf
 	}
 
 	printf("\tUsable free memory: %'llu bytes\n",
