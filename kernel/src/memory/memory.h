@@ -1,11 +1,11 @@
 #ifndef __MEMORY_MEMORY_H
 #define __MEMORY_MEMORY_H 1
 
-#include <stdint.h>
 #include <limine.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #define PAGE_BYTE_SIZE (4096ULL)
-#define INVALID_PHYS (1ULL << 52)
 
 void init_memory(void);
 void print_memory_layout(void);
@@ -29,8 +29,7 @@ static inline phys_addr_t virt_to_phys(const virt_addr_t virtual_address)
 	return (phys_addr_t)(virtual_address - hhdm_request.response->offset);
 }
 
-struct MEMORY_BITMAP
-{
+struct MEMORY_BITMAP {
 	virt_addr_t address;
 	size_t size;
 };

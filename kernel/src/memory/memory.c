@@ -1,5 +1,6 @@
 #include "../macro.h"
 #include "../string/utility.h"
+#include "debug.h"
 #include "heap.h"
 #include "panic.h"
 #include "physical.h"
@@ -7,7 +8,7 @@
 #include <limine.h>
 #include <stddef.h>
 
-#define HEAP_INITIAL_SIZE (0x1000 * 5)
+#define HEAP_INITIAL_SIZE (0x1000 * 32)
 
 extern char kernel_end; // Last address in the kernel
 
@@ -88,7 +89,6 @@ void init_memory(void)
 	}
 
 	init_heap((void *)heap_virtual_address, HEAP_INITIAL_SIZE);
-
 	// TODO relocate stack
 
 	// TODO release bootloader regions

@@ -1,14 +1,11 @@
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 void *memset(void *s, int c, size_t n)
 {
-    uint8_t *p = (uint8_t *)s;
+	asm volatile("cld\n"
+				 "rep stosb" ::"D"(s),
+				 "c"(n), "a"(c));
 
-    for (size_t i = 0; i < n; i++)
-    {
-        p[i] = (uint8_t)c;
-    }
-
-    return s;
+	return s;
 }

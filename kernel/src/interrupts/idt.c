@@ -195,19 +195,19 @@ void isr_exception_handler(struct INTERRUPT_STACK *stack)
 	if (stack->error_code != 0) {
 		printf(" | Error Code: %#018lx\n", stack->error_code);
 	} else {
-		printf("\n");
-	}
-
-	// Page fault
-	if (stack->vector == 0x0e) {
-		if (stack->cr2 == 0) {
-			printf("\n\tNULL pointer dereference\n\n");
-		}
+		printf(":\n");
 	}
 
 	strace(10, (void *)stack->rbp, (void *)stack->return_rip);
 
 	printf("\n");
+
+	// Page fault
+	if (stack->vector == 0x0e) {
+		if (stack->cr2 == 0) {
+			printf("\tNULL pointer dereference\n\n");
+		}
+	}
 
 	printf("RAX=%016lx  RBX=%016lx  RCX=%016lx  RDX=%016lx\n", stack->rax,
 		   stack->rbx, stack->rcx, stack->rdx);

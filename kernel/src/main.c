@@ -12,13 +12,16 @@
 #include "fonts/font.h"
 #include "gdt.h"
 #include "graphics/graphics.h"
+#include "instruction.h"
 #include "interrupts/idt.h"
 #include "macro.h"
+#include "memory/heap.h"
 #include "memory/memory.h"
 #include "memory/stack.h"
 #include "panic.h"
 #include "serial.h"
 #include "string/utility.h"
+#include "type.h"
 
 ATTR_REQUEST static volatile LIMINE_BASE_REVISION(2);
 
@@ -52,35 +55,33 @@ void kmain(void)
 		dwarf_load_sections(elf_header);
 	} while (0);
 
+	printf("\n\n");
+
+	enable_sse2();
+
+	init_memory();
+
 	struct FONT font;
 	PSF2_load_font(&font);
-	GRAPHICS_init(&font);
 
-	GRAPHICS_CONTEXT *ctx =
-		GRAPHICS_get_ctx(SINGLE, 0, 0, get_screen_width(), get_screen_height());
-
-	uint32_t color = 0;
-	uint32_t color_mask = 0x0f000000;
-	for (int i = 0; i < 10; i++) {
-		for (int j = 0; j < 16; j++) {
-			color = (color_mask >> (j * 2));
-			set_fill(ctx, color);
-			fill_rect(ctx,
-					  ((get_screen_width() / 32) * j) + get_screen_width() / 2 +
-						  150,
-					  (get_screen_height() / 10) * i, 50, 200);
-		}
+	if (graphics_init(&font)) {
+		panic();
 	}
 
-	TTY_init();
+	GRAPHICS_CONTEXT *ctx =
+		graphics_get_ctx(DOUBLE, 0, 0, get_screen_width(), get_screen_height());
+
+	TTY_init(ctx, get_ctx_height(ctx) / get_font_height(),
+			 get_ctx_width(ctx) / get_font_width());
 
 	printf(KINFO "========== m4xdevOS ========== \n");
 
-	init_memory();
 	init_gdt();
 	init_idt();
 
-	strace(10, NULL, NULL);
+	while (1) {
+		print_memory_layout();
+	}
 
 	printf(KINFO "Done. Halting\n");
 	halt();

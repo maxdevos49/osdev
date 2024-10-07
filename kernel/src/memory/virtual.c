@@ -6,6 +6,7 @@
 #include "../instruction.h"
 #include "../macro.h"
 #include "../string/utility.h"
+#include "debug.h"
 #include "memory.h"
 #include "panic.h"
 #include "physical.h"
@@ -80,11 +81,13 @@ static void maybe_restock_page_table_pool(void)
 		return;
 	}
 
+	err_code err = 0;
+
 	for (uint64_t i = 0; i < PT_POOL_SIZE; i++) {
 		if (_vm_context.pt_pool[i] == NULL) {
-			phys_addr_t physical_address = allocate_memory(PAGE_BYTE_SIZE);
-
-			if (physical_address == INVALID_PHYS) {
+			phys_addr_t physical_address = 0;
+			if ((err = allocate_memory(PAGE_BYTE_SIZE, &physical_address))) {
+				debug_code(err);
 				panicf("Unable to allocate page frame for a page table.\n");
 			}
 
@@ -109,6 +112,8 @@ static void set_page_entry(union PAGE_ENTRY *entry, phys_addr_t addr,
 	entry->present = true;
 	entry->read_write = flags & PAGE_MAP_WRITEABLE ? true : false;
 	entry->user_supervisor = flags & PAGE_MAP_USER ? true : false;
+	entry->cache_disable = flags & PAGE_MAP_CACHE_DISABLE ? true : false;
+	entry->write_through = flags & PAGE_MAP_WRITE_THROUGH ? true : false;
 
 	uint64_t phys_mask = (1ULL << (_vm_context.physical_address_size - 12)) - 1;
 	uint64_t phys_index =
@@ -177,9 +182,9 @@ static bool map_page(phys_addr_t physical_address, virt_addr_t virtual_address,
 		set_page_entry(pt_entry, physical_address, flags);
 	}
 
-	// if (read_CR3() == _vm_context.pml4_table) {
-	// 	flush_tlb(virtual_address);
-	// }
+	if (read_CR3() == (uintptr_t)_vm_context.pml4_table) {
+		flush_tlb(virtual_address);
+	}
 
 	maybe_restock_page_table_pool();
 
@@ -253,8 +258,7 @@ void print_memory_mapping(void)
 
 					uintptr_t virtual_address =
 						((i << 39) | (ii << 30) | (iii << 21) | (iiii << 12)) |
-						(0xffffffffffffffff
-						 << _vm_context.virtual_address_size);
+						(0xffffffffffffffff << _vm_context.virtual_address_size);
 					printf("\t\t\tPTE Index: %3ld | PTE: %#018lx | Physical: "
 						   "%#018lx | Virtual: %#018lx\n",
 						   iiii, page_entry->raw,
@@ -268,6 +272,7 @@ void print_memory_mapping(void)
 
 void init_virtual_memory(struct MEMORY_BITMAP bitmap)
 {
+	err_code err = 0;
 	printf(KINFO "Initiating virtual memory management...\n");
 
 	struct LONG_MODE_SIZE_IDENTIFIERS lmsi = cpuid_long_mode_size_identifiers();
@@ -277,13 +282,13 @@ void init_virtual_memory(struct MEMORY_BITMAP bitmap)
 
 	printf("\tSupported physical address bits: %d\n",
 		   _vm_context.physical_address_size);
-	printf("\tSupported virtual address bits: %d\n",
-		   _vm_context.virtual_address_size);
+	printf("\tSupported virtual address bits: %d\n", _vm_context.virtual_address_size);
 	printf("\tHHDM offset: %#018lx\n", hhdm_request.response->offset);
 
 	// Start a new PML4 table
-	phys_addr_t pml4_table_physical_address = allocate_memory(1);
-	if (pml4_table_physical_address == INVALID_PHYS) {
+	phys_addr_t pml4_table_physical_address = 0;
+	if ((err = allocate_memory(1, &pml4_table_physical_address))) {
+		debug_code(err);
 		panicf("Invalid physical address returned for PML4 table\n");
 	}
 
@@ -297,7 +302,11 @@ void init_virtual_memory(struct MEMORY_BITMAP bitmap)
 
 	// Prefill the page table pool.
 	for (uint64_t i = 0; i < PT_POOL_SIZE; i++) {
-		phys_addr_t physical_address = allocate_memory(1);
+		phys_addr_t physical_address = 0;
+		if ((err = allocate_memory(1, &physical_address))) {
+			debug_code(err);
+			panicf("Failed to allocate page for page table pool.\n");
+		}
 		virt_addr_t virtual_address = phys_to_virt(physical_address);
 
 		memset((void *)virtual_address, 0, PAGE_BYTE_SIZE);
@@ -349,8 +358,14 @@ void init_virtual_memory(struct MEMORY_BITMAP bitmap)
 					(virt_addr_t)kernel_address_request.response->virtual_base;
 			}
 
-			map_memory(physical_address, virtual_address, entry->length,
-					   PAGE_MAP_WRITEABLE);
+			if (entry->type == LIMINE_MEMMAP_FRAMEBUFFER) {
+				map_memory(physical_address, virtual_address, entry->length,
+						   PAGE_MAP_WRITEABLE | PAGE_MAP_CACHE_DISABLE);
+
+			} else {
+				map_memory(physical_address, virtual_address, entry->length,
+						   PAGE_MAP_WRITEABLE);
+			}
 			pages_mapped += entry->length / PAGE_BYTE_SIZE;
 			break;
 		}

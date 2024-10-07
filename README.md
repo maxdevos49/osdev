@@ -14,6 +14,10 @@ x86_64 kernel with a goal of getting to userspace and porting Doom. Further plan
 - https://os.phil-opp.com/paging-implementation/#recursive-page-tables
 - https://gcc.gnu.org/wiki/FAQ#configure
 - https://roscopeco.com/2018/11/25/using-gcc-as-cross-compiler-with-x86_64-target/
+- https://www.minix3.org/theses/gerofi-minix-vfs.pdf
+- http://kos.enix.org/pub/sunos-vi.pdf
+- https://maups.github.io/papers/tcc_004.pdf
+- https://www.sunhelp.org/history/pdf/unix_filesys_extent_like_perf.pdf
 
 ## How to use this?
 

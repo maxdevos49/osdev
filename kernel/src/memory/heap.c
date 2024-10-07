@@ -1,11 +1,19 @@
 #include "../string/utility.h"
+#include "debug.h"
+#include "macro.h"
 #include "panic.h"
 #include "physical.h"
 #include "virtual.h"
-#include <macro.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#define MAX(num1, num2) ((num1 > num2) ? num1 : num2)
+
+struct HEAP_MEMORY_RANGE {
+	uintptr_t address;
+	size_t size;
+};
 
 struct HEAP_BLOCK {
 	size_t length;
@@ -15,6 +23,7 @@ struct HEAP_BLOCK {
 	struct HEAP_BLOCK *next_free;
 };
 
+static struct HEAP_MEMORY_RANGE _heap = {0};
 static struct HEAP_BLOCK *_root_block = NULL;
 static struct HEAP_BLOCK *_first_free_block = NULL;
 
@@ -23,13 +32,45 @@ void print_heap(void)
 	struct HEAP_BLOCK *ptr = _root_block;
 	printf("=======Heap report=======\n");
 	do {
-		printf("Block Address: %p Size: %lu bytes Status: %s\n", ptr,
+		printf("Block Address: %p Size: %'lu bytes Status: %s\n", ptr,
 			   ptr->length, ptr->free ? "Free" : "Allocated");
 		printf(
 			"\tPrevious:      %p\n\tNext:          %p\n\tNext Free      %p\n",
 			ptr->previous, ptr->next, ptr->next_free);
 		ptr = ptr->next;
 	} while (ptr != NULL);
+}
+
+static void expand_heap(size_t minimum_expansion_size)
+{
+	err_code err = 0;
+
+	size_t new_size = MAX(minimum_expansion_size, _heap.size * 2) + 0x1000;
+
+	printf(KDEBUG "Expanding heap by size: %'lu bytes\n", new_size);
+
+	phys_addr_t physical_address = 0;
+	if ((err = allocate_memory(new_size, &physical_address))) {
+		debug_code(err);
+		panicf("Failed to allocate new physical memory to expand heap.\n");
+	}
+
+	virt_addr_t virtual_address = (virt_addr_t)(_heap.address + _heap.size);
+	if (false == map_memory(physical_address, virtual_address, new_size,
+							PAGE_MAP_WRITEABLE)) {
+		panicf("Failed to map new physical memory to expand heap.\n");
+	}
+
+	struct HEAP_BLOCK *last_block = _root_block;
+	while (last_block->next != NULL) {
+		last_block = last_block->next;
+	}
+
+	if (last_block->free == true) {
+		last_block->length += new_size;
+	} else {
+		panicf("Last heap block is not free. Time to implement this case\n");
+	}
 }
 
 void *kmalloc(size_t size)
@@ -48,8 +89,16 @@ void *kmalloc(size_t size)
 	}
 
 	if (block == NULL) {
-		// No sufficient length memory blocks are available
-		panicf("Not enough memory left to malloc %'lu bytes", size);
+		expand_heap(size);
+
+		block = _first_free_block;
+		while (block != NULL && block->length < size) {
+			block = block->next_free;
+		}
+
+		if (block == NULL) {
+			panicf("Out of memory");
+		}
 	}
 
 	// A free block was found which is exactly as big as needed.
@@ -108,7 +157,7 @@ void *kmalloc(size_t size)
 void kfree(void *ptr)
 {
 	if (ptr == NULL) {
-		panicf("Attempt to free null pointer.");
+		panicf("Attempt to free null pointer.\n");
 		return;
 	}
 
@@ -161,20 +210,25 @@ void kfree(void *ptr)
 
 void init_heap(void *heap_address, size_t size)
 {
+	err_code err = 0;
+
 	printf(KINFO "Initiating kernel heap\n");
 	printf("\tHeap address: %p\n", heap_address);
 	printf("\tInitial Heap size: %'lu bytes\n", size);
 
-	phys_addr_t physical_address = allocate_memory(size);
-	if (physical_address == INVALID_PHYS) {
+	phys_addr_t physical_address = 0;
+	if ((err = allocate_memory(size, &physical_address))) {
 		panicf(
-			"Insufficent contiguous physical memory to initialize the heap.");
+			"Insufficent contiguous physical memory to initialize the heap.\n");
 	}
 
 	if (map_memory(physical_address, (virt_addr_t)heap_address, size,
 				   PAGE_MAP_WRITEABLE) == false) {
 		panicf("Failed to map virtual memory for the kernel heap\n");
 	}
+
+	_heap.address = (uintptr_t)heap_address;
+	_heap.size = size;
 
 	_root_block = (struct HEAP_BLOCK *)heap_address;
 

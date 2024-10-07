@@ -30,8 +30,6 @@ void strace(int max_frames, void *starting_rbp, void *starting_rip)
 	struct LINE_INFO line = {0};
 	char *symbol_string = NULL;
 
-	printf("Call trace:\n");
-
 	do {
 		if ((err = dwarf_query_line((uintptr_t)starting_rip, EXACT_LINE,
 									&line))) {
